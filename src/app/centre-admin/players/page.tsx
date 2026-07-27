@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { calculateAge } from "@/lib/age";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -61,8 +63,8 @@ export default async function PlayersPage() {
           ))}
           {players?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                No players yet.
+              <TableCell colSpan={6}>
+                <EmptyState icon={Users} title="No players yet" message="Add your first player to get started." />
               </TableCell>
             </TableRow>
           )}

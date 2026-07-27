@@ -29,3 +29,13 @@ alter default privileges in schema public
 
 alter default privileges in schema public
   grant usage, select on sequences to authenticated, service_role;
+
+-- private.user_role()/private.user_centre_id() (used by nearly every RLS
+-- policy) are unreachable for authenticated/service_role without this:
+-- CREATE SCHEMA never grants USAGE to anyone but the owner. Without it,
+-- calling these functions fails with "permission denied for schema
+-- private" — and because that failure happens *while Postgres is
+-- evaluating a table's RLS policy*, it surfaces to PostgREST as the far
+-- more confusing "infinite recursion detected in policy for relation ..."
+-- instead of the actual permission error.
+grant usage on schema private to authenticated, service_role;

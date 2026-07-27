@@ -1,5 +1,7 @@
+import { Building2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicFileUrl } from "@/lib/storage/r2";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -11,14 +13,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddCentreDialog } from "./add-centre-dialog";
+import { InviteAdminDialog } from "./invite-admin-dialog";
 
 export default async function CentresPage() {
   const supabase = await createClient();
-  const { data: centres } = await supabase
-    .from("centres")
-    .select("id, name, contact_number, email, country, logo_path, is_active")
-    .order("created_at", { ascending: false });
+  const [{ data: centres }, { data: admins }] = await Promise.all([
+    supabase
+      .from("centres")
+      .select("id, name, contact_number, email, country, logo_path, is_active")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("centre_id")
+      .eq("role", "centre_admin")
+      .eq("is_active", true),
+  ]);
 
+  const centresWithAdmin = new Set((admins ?? []).map((a) => a.centre_id));
   const canShowLogos = Boolean(process.env.R2_PUBLIC_URL);
 
   return (
@@ -36,6 +47,8 @@ export default async function CentresPage() {
             <TableHead>Email</TableHead>
             <TableHead>Country</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Admin</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -60,12 +73,20 @@ export default async function CentresPage() {
                   {centre.is_active ? "Active" : "Inactive"}
                 </Badge>
               </TableCell>
+              <TableCell>
+                <Badge variant={centresWithAdmin.has(centre.id) ? "default" : "destructive"}>
+                  {centresWithAdmin.has(centre.id) ? "Assigned" : "None"}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <InviteAdminDialog centreId={centre.id} centreName={centre.name} />
+              </TableCell>
             </TableRow>
           ))}
           {centres?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No centres yet.
+              <TableCell colSpan={7}>
+                <EmptyState icon={Building2} title="No centres yet" message="Add your first centre to get started." />
               </TableCell>
             </TableRow>
           )}

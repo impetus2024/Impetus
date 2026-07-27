@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -47,8 +49,8 @@ export default async function CoachAttendancePage() {
           ))}
           {batches?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={2} className="text-center text-muted-foreground">
-                No batches assigned yet.
+              <TableCell colSpan={2}>
+                <EmptyState icon={ClipboardCheck} title="No batches assigned yet" />
               </TableCell>
             </TableRow>
           )}

@@ -1,12 +1,5 @@
 import { requireRole } from "@/lib/auth/dal";
-import { DashboardShell } from "@/components/dashboard-shell";
-
-const NAV_ITEMS = [
-  { href: "/coach", label: "Dashboard" },
-  { href: "/coach/batches", label: "Training Batch" },
-  { href: "/coach/attendance", label: "Attendance" },
-  { href: "/coach/injuries", label: "Injuries" },
-];
+import { AppShell } from "@/components/shell/app-shell";
 
 export default async function CoachLayout({
   children,
@@ -16,12 +9,13 @@ export default async function CoachLayout({
   const profile = await requireRole("coach");
 
   return (
-    <DashboardShell
-      title="Coach"
+    <AppShell
+      navKey="coach"
+      roleLabel="Coach"
       userName={profile.full_name || profile.email}
-      navItems={NAV_ITEMS}
+      userEmail={profile.email}
     >
       {children}
-    </DashboardShell>
+    </AppShell>
   );
 }

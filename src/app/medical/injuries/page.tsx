@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -60,8 +62,8 @@ export default async function MedicalInjuriesPage() {
           ))}
           {players?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No players yet.
+              <TableCell colSpan={5}>
+                <EmptyState icon={Users} title="No players yet" />
               </TableCell>
             </TableRow>
           )}

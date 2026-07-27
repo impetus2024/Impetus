@@ -63,6 +63,8 @@ export async function createCentre(
     return { error: "Failed to create centre." };
   }
 
+  const warnings: string[] = [];
+
   try {
     const logoKey = await uploadFile(logo, `centre-logos/${centre.id}`);
     await supabase
@@ -70,13 +72,13 @@ export async function createCentre(
       .update({ logo_path: logoKey })
       .eq("id", centre.id);
   } catch {
-    revalidatePath("/super-admin/centres");
-    return {
-      error:
-        "Centre created, but the logo upload failed (storage isn't configured yet). Add R2 credentials and try again.",
-    };
+    warnings.push(
+      "logo upload failed (storage isn't configured yet) — add it later"
+    );
   }
 
+  // Independent of the logo: the centre still needs an admin even if the
+  // logo didn't make it, so this always runs regardless of the step above.
   try {
     await provisionUser({
       email: parsed.data.adminEmail,
@@ -86,11 +88,48 @@ export async function createCentre(
       loginUrl: absoluteUrl("/login"),
     });
   } catch {
-    revalidatePath("/super-admin/centres");
-    return {
-      error:
-        "Centre created, but inviting the Centre Admin failed (email isn't configured yet). Add the administrator from Administrator Management once email is set up.",
-    };
+    warnings.push("failed to create the Centre Admin account — add one from the centre's row instead");
+  }
+
+  revalidatePath("/super-admin/centres");
+
+  if (warnings.length > 0) {
+    return { error: `Centre created, but ${warnings.join("; ")}.` };
+  }
+  return undefined;
+}
+
+export async function inviteCentreAdmin(
+  centreId: string,
+  _prev: CentreFormState,
+  formData: FormData
+): Promise<CentreFormState> {
+  await requireRole("super_admin");
+
+  const parsed = z
+    .object({
+      adminName: z.string().min(1, { error: "Name is required." }),
+      adminEmail: z.email({ error: "Enter a valid email." }),
+    })
+    .safeParse({
+      adminName: formData.get("adminName"),
+      adminEmail: formData.get("adminEmail"),
+    });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  try {
+    await provisionUser({
+      email: parsed.data.adminEmail,
+      fullName: parsed.data.adminName,
+      role: "centre_admin",
+      centreId,
+      loginUrl: absoluteUrl("/login"),
+    });
+  } catch {
+    return { error: "Failed to create the Centre Admin account." };
   }
 
   revalidatePath("/super-admin/centres");

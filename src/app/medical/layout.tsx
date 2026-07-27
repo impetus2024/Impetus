@@ -1,10 +1,5 @@
 import { requireRole } from "@/lib/auth/dal";
-import { DashboardShell } from "@/components/dashboard-shell";
-
-const NAV_ITEMS = [
-  { href: "/medical", label: "Dashboard" },
-  { href: "/medical/injuries", label: "Injuries" },
-];
+import { AppShell } from "@/components/shell/app-shell";
 
 export default async function MedicalLayout({
   children,
@@ -14,12 +9,13 @@ export default async function MedicalLayout({
   const profile = await requireRole("medical");
 
   return (
-    <DashboardShell
-      title="Medical"
+    <AppShell
+      navKey="medical"
+      roleLabel="Medical"
       userName={profile.full_name || profile.email}
-      navItems={NAV_ITEMS}
+      userEmail={profile.email}
     >
       {children}
-    </DashboardShell>
+    </AppShell>
   );
 }

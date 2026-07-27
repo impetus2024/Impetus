@@ -1,7 +1,9 @@
+import { Package2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -74,8 +76,8 @@ export default async function PackagesPage() {
           ))}
           {packages?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                No packages yet.
+              <TableCell colSpan={6}>
+                <EmptyState icon={Package2} title="No packages yet" message="Add a package to start enrolling players." />
               </TableCell>
             </TableRow>
           )}

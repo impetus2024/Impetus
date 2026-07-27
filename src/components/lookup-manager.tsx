@@ -1,9 +1,11 @@
 "use client";
 
+import { Tag } from "lucide-react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -129,8 +131,8 @@ export function LookupManager({
           ))}
           {items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="text-center text-muted-foreground">
-                No {itemLabel.toLowerCase()}s yet.
+              <TableCell colSpan={3}>
+                <EmptyState icon={Tag} title={`No ${itemLabel.toLowerCase()}s yet`} />
               </TableCell>
             </TableRow>
           )}

@@ -1,6 +1,8 @@
+import { DoorOpen } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -68,8 +70,8 @@ export default async function GatePassPage() {
           ))}
           {logs?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No gate pass entries yet.
+              <TableCell colSpan={5}>
+                <EmptyState icon={DoorOpen} title="No gate pass entries yet" />
               </TableCell>
             </TableRow>
           )}

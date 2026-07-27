@@ -131,17 +131,27 @@ create trigger on_auth_user_updated
   for each row execute function public.handle_auth_user_sync();
 
 -- ============================================================
--- Helper functions for RLS (SECURITY DEFINER: bypass RLS on profiles
--- to avoid recursive policy evaluation)
+-- Helper functions for RLS.
+--
+-- Read role/centre_id straight from the JWT's app_metadata (set only by
+-- the service role via the admin API — see handle_auth_user_sync above and
+-- src/lib/supabase/admin.ts — never client-writable) instead of querying
+-- profiles. A version of this that queried `profiles` (even as a
+-- SECURITY DEFINER function, even rewritten in plpgsql to defeat planner
+-- inlining) still hit "infinite recursion detected in policy for relation
+-- players": evaluating the players policy called this function, which
+-- queried profiles, which re-evaluated *its own* RLS policies, which call
+-- this same function again. Parsing the JWT touches no table at all, so
+-- that cycle can't exist here by construction.
 -- ============================================================
 create or replace function private.user_role() returns public.user_role
-language sql stable security definer set search_path = public as $$
-  select role from public.profiles where id = auth.uid()
+language sql stable as $$
+  select nullif(auth.jwt() -> 'app_metadata' ->> 'role', '')::public.user_role
 $$;
 
 create or replace function private.user_centre_id() returns uuid
-language sql stable security definer set search_path = public as $$
-  select centre_id from public.profiles where id = auth.uid()
+language sql stable as $$
+  select nullif(auth.jwt() -> 'app_metadata' ->> 'centre_id', '')::uuid
 $$;
 
 alter table public.centres enable row level security;
@@ -418,10 +428,21 @@ create policy "medical views own centre players" on public.players
 
 -- ============================================================
 -- Parent <-> player links (a parent may have multiple children)
+--
+-- centre_id is denormalized from players.centre_id at insert time
+-- specifically so this table's RLS policies never need to subquery
+-- `players` — players' own "parents view own children" policy already
+-- subqueries *this* table, and a policy on parent_player_links that
+-- subqueried players back would create a genuine A-references-B,
+-- B-references-A cycle. Postgres's RLS rewriter detects that cycle
+-- structurally (whether or not a given caller's role would ever actually
+-- hit both branches) and fails every query on either table with
+-- "infinite recursion detected in policy for relation ...".
 -- ============================================================
 create table public.parent_player_links (
   parent_id uuid not null references public.profiles (id) on delete cascade,
   player_id uuid not null references public.players (id) on delete cascade,
+  centre_id uuid not null references public.centres (id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (parent_id, player_id)
 );
@@ -434,12 +455,10 @@ create policy "super_admin full access to parent_player_links" on public.parent_
 
 create policy "centre_admin manages links for own centre players" on public.parent_player_links
   for all using (
-    private.user_role() = 'centre_admin'
-    and player_id in (select id from public.players where centre_id = private.user_centre_id())
+    private.user_role() = 'centre_admin' and centre_id = private.user_centre_id()
   )
   with check (
-    private.user_role() = 'centre_admin'
-    and player_id in (select id from public.players where centre_id = private.user_centre_id())
+    private.user_role() = 'centre_admin' and centre_id = private.user_centre_id()
   );
 
 create policy "parents view own links" on public.parent_player_links

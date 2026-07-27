@@ -406,21 +406,31 @@ export type Database = {
       }
       parent_player_links: {
         Row: {
+          centre_id: string
           created_at: string
           parent_id: string
           player_id: string
         }
         Insert: {
+          centre_id: string
           created_at?: string
           parent_id: string
           player_id: string
         }
         Update: {
+          centre_id?: string
           created_at?: string
           parent_id?: string
           player_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "parent_player_links_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "parent_player_links_parent_id_fkey"
             columns: ["parent_id"]

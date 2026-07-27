@@ -1,10 +1,5 @@
 import { requireRole } from "@/lib/auth/dal";
-import { DashboardShell } from "@/components/dashboard-shell";
-
-const NAV_ITEMS = [
-  { href: "/super-admin", label: "Dashboard" },
-  { href: "/super-admin/centres", label: "Centre Management" },
-];
+import { AppShell } from "@/components/shell/app-shell";
 
 export default async function SuperAdminLayout({
   children,
@@ -14,12 +9,13 @@ export default async function SuperAdminLayout({
   const profile = await requireRole("super_admin");
 
   return (
-    <DashboardShell
-      title="Super Admin"
+    <AppShell
+      navKey="super-admin"
+      roleLabel="Super Admin"
       userName={profile.full_name || profile.email}
-      navItems={NAV_ITEMS}
+      userEmail={profile.email}
     >
       {children}
-    </DashboardShell>
+    </AppShell>
   );
 }

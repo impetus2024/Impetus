@@ -202,9 +202,11 @@ export async function createPlayer(
     );
 
     const admin = createAdminClient();
-    await admin
-      .from("parent_player_links")
-      .insert({ parent_id: parentProfileId, player_id: player.id });
+    await admin.from("parent_player_links").insert({
+      parent_id: parentProfileId,
+      player_id: player.id,
+      centre_id: centreAdmin.centre_id!,
+    });
   } catch {
     // Parent account/link failed (e.g. email not configured yet) — the
     // player record itself is saved; the link can be retried by editing

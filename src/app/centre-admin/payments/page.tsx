@@ -1,5 +1,7 @@
+import { Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -63,8 +65,8 @@ export default async function PaymentsPage() {
           ))}
           {payments?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No payments recorded yet.
+              <TableCell colSpan={5}>
+                <EmptyState icon={Wallet} title="No payments recorded yet" />
               </TableCell>
             </TableRow>
           )}

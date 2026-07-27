@@ -1,7 +1,9 @@
+import { CalendarCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -110,8 +112,8 @@ export default async function BatchesPage() {
           ))}
           {batches?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
-                No batches yet.
+              <TableCell colSpan={7}>
+                <EmptyState icon={CalendarCheck} title="No batches yet" message="Create your first training batch." />
               </TableCell>
             </TableRow>
           )}

@@ -5,6 +5,12 @@ import { sendAccountInviteEmail } from "@/lib/email/send";
 import type { UserRole } from "@/lib/auth/roles";
 
 function generateTempPassword(): string {
+  // DEV_DEFAULT_PASSWORD lets every provisioned account share one known
+  // password during local testing, when there's no email service to
+  // deliver a random one. Never set this in a deployed environment.
+  if (process.env.DEV_DEFAULT_PASSWORD) {
+    return process.env.DEV_DEFAULT_PASSWORD;
+  }
   // 24 chars of base64url — well above Supabase's default minimum, no
   // ambiguous characters to transcribe since it's only ever emailed, not
   // typed from a printout.
@@ -40,12 +46,14 @@ export async function provisionUser(params: {
     throw error ?? new Error("Failed to create user");
   }
 
-  await sendAccountInviteEmail({
-    to: email,
-    fullName,
-    tempPassword,
-    loginUrl,
-  });
+  // The account is already usable at this point (password is set above).
+  // Email delivery is a notification, not a precondition — don't undo the
+  // account creation just because RESEND_API_KEY isn't configured yet.
+  try {
+    await sendAccountInviteEmail({ to: email, fullName, tempPassword, loginUrl });
+  } catch (err) {
+    console.warn(`Invite email not sent for ${email}:`, err);
+  }
 
   return data.user;
 }

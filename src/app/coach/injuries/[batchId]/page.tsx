@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -73,8 +75,8 @@ export default async function CoachBatchInjuriesPage({
           ))}
           {players?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={2} className="text-center text-muted-foreground">
-                No players in this batch yet.
+              <TableCell colSpan={2}>
+                <EmptyState icon={Users} title="No players in this batch yet" />
               </TableCell>
             </TableRow>
           )}

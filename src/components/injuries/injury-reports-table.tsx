@@ -1,5 +1,7 @@
+import { HeartPulse } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/storage/r2";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -68,8 +70,8 @@ export async function InjuryReportsTable({ playerId }: { playerId: string }) {
         ))}
         {rows.length === 0 && (
           <TableRow>
-            <TableCell colSpan={6} className="text-center text-muted-foreground">
-              No injury reports yet.
+            <TableCell colSpan={6}>
+              <EmptyState icon={HeartPulse} title="No injury reports yet" />
             </TableCell>
           </TableRow>
         )}
