@@ -1,0 +1,76 @@
+import { createClient } from "@/lib/supabase/server";
+import { getPublicFileUrl } from "@/lib/storage/r2";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AddCentreDialog } from "./add-centre-dialog";
+
+export default async function CentresPage() {
+  const supabase = await createClient();
+  const { data: centres } = await supabase
+    .from("centres")
+    .select("id, name, contact_number, email, country, logo_path, is_active")
+    .order("created_at", { ascending: false });
+
+  const canShowLogos = Boolean(process.env.R2_PUBLIC_URL);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Centre Management</h1>
+        <AddCentreDialog />
+      </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Centre</TableHead>
+            <TableHead>Contact</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Country</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {centres?.map((centre) => (
+            <TableRow key={centre.id}>
+              <TableCell className="flex items-center gap-3">
+                <Avatar>
+                  {canShowLogos && centre.logo_path && (
+                    <AvatarImage src={getPublicFileUrl(centre.logo_path)} />
+                  )}
+                  <AvatarFallback>
+                    {centre.name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                {centre.name}
+              </TableCell>
+              <TableCell>{centre.contact_number}</TableCell>
+              <TableCell>{centre.email}</TableCell>
+              <TableCell>{centre.country}</TableCell>
+              <TableCell>
+                <Badge variant={centre.is_active ? "default" : "secondary"}>
+                  {centre.is_active ? "Active" : "Inactive"}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          ))}
+          {centres?.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center text-muted-foreground">
+                No centres yet.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
