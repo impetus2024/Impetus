@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { selectLabel } from "@/lib/utils";
 import type { BatchFormState } from "./actions";
 
 type Option = { id: string; name: string };
@@ -76,7 +77,9 @@ export function BatchFormDialog({
                 required
               >
                 <SelectTrigger id="headCoachId" className="w-full">
-                  <SelectValue placeholder="Select coach" />
+                  <SelectValue placeholder="Select coach">
+                    {selectLabel(coaches, "Select coach")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {coaches.map((c) => (
@@ -88,13 +91,15 @@ export function BatchFormDialog({
               </Select>
             </Field>
             <Field>
-              <FieldLabel htmlFor="playerTypeId">Player Type</FieldLabel>
+              <FieldLabel htmlFor="playerTypeId">Program Type</FieldLabel>
               <Select
                 name="playerTypeId"
                 defaultValue={defaultValues?.playerTypeId ?? undefined}
               >
                 <SelectTrigger id="playerTypeId" className="w-full">
-                  <SelectValue placeholder="Select player type" />
+                  <SelectValue placeholder="Select program type">
+                    {selectLabel(playerTypes, "Select program type")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {playerTypes.map((p) => (
@@ -113,7 +118,9 @@ export function BatchFormDialog({
                 required
               >
                 <SelectTrigger id="ageCategoryId" className="w-full">
-                  <SelectValue placeholder="Select age category" />
+                  <SelectValue placeholder="Select age category">
+                    {selectLabel(ageCategories, "Select age category")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {ageCategories.map((a) => (

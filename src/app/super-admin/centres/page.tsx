@@ -2,6 +2,8 @@ import { Building2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getPublicFileUrl } from "@/lib/storage/r2";
 import { EmptyState } from "@/components/empty-state";
+import { ListSearch } from "@/components/list-search";
+import { ListFilter } from "@/components/list-filter";
 import {
   Table,
   TableBody,
@@ -15,13 +17,24 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddCentreDialog } from "./add-centre-dialog";
 import { InviteAdminDialog } from "./invite-admin-dialog";
 
-export default async function CentresPage() {
+export default async function CentresPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string }>;
+}) {
+  const { q, status } = await searchParams;
   const supabase = await createClient();
+
+  let centresQuery = supabase
+    .from("centres")
+    .select("id, name, contact_number, email, country, logo_path, is_active");
+
+  if (q) centresQuery = centresQuery.ilike("name", `%${q}%`);
+  if (status === "active") centresQuery = centresQuery.eq("is_active", true);
+  if (status === "inactive") centresQuery = centresQuery.eq("is_active", false);
+
   const [{ data: centres }, { data: admins }] = await Promise.all([
-    supabase
-      .from("centres")
-      .select("id, name, contact_number, email, country, logo_path, is_active")
-      .order("created_at", { ascending: false }),
+    centresQuery.order("created_at", { ascending: false }),
     supabase
       .from("profiles")
       .select("centre_id")
@@ -31,12 +44,25 @@ export default async function CentresPage() {
 
   const centresWithAdmin = new Set((admins ?? []).map((a) => a.centre_id));
   const canShowLogos = Boolean(process.env.R2_PUBLIC_URL);
+  const hasFilters = Boolean(q || status);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Centre Management</h1>
         <AddCentreDialog />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <ListSearch placeholder="Search centres..." />
+        <ListFilter
+          paramKey="status"
+          label="All statuses"
+          options={[
+            { id: "active", name: "Active" },
+            { id: "inactive", name: "Inactive" },
+          ]}
+        />
       </div>
 
       <Table>
@@ -86,7 +112,11 @@ export default async function CentresPage() {
           {centres?.length === 0 && (
             <TableRow>
               <TableCell colSpan={7}>
-                <EmptyState icon={Building2} title="No centres yet" message="Add your first centre to get started." />
+                {hasFilters ? (
+                  <EmptyState icon={Building2} title="No centres match your search" message="Try a different name or clear the filters." />
+                ) : (
+                  <EmptyState icon={Building2} title="No centres yet" message="Add your first centre to get started." />
+                )}
               </TableCell>
             </TableRow>
           )}

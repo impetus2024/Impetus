@@ -2,6 +2,8 @@ import { UserCog } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { EmptyState } from "@/components/empty-state";
+import { ListSearch } from "@/components/list-search";
+import { ListFilter } from "@/components/list-filter";
 import {
   Table,
   TableBody,
@@ -20,22 +22,53 @@ const ROLE_LABEL: Record<string, string> = {
   medical: "Medical",
 };
 
-export default async function AdministratorsPage() {
+const ROLE_OPTIONS = [
+  { id: "centre_admin", name: "Centre Admin" },
+  { id: "coach", name: "Coach" },
+  { id: "medical", name: "Medical" },
+];
+
+export default async function AdministratorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; role?: string; status?: string }>;
+}) {
   const centreAdmin = await requireRole("centre_admin");
+  const { q, role, status } = await searchParams;
   const supabase = await createClient();
 
-  const { data: administrators } = await supabase
+  let query = supabase
     .from("profiles")
     .select("id, full_name, email, role, is_active")
     .eq("centre_id", centreAdmin.centre_id!)
-    .in("role", ["centre_admin", "coach", "medical"])
-    .order("full_name");
+    .in("role", ["centre_admin", "coach", "medical"]);
+
+  if (q) query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
+  if (role) query = query.eq("role", role as "centre_admin" | "coach" | "medical");
+  if (status === "active") query = query.eq("is_active", true);
+  if (status === "inactive") query = query.eq("is_active", false);
+
+  const { data: administrators } = await query.order("full_name");
+  const hasFilters = Boolean(q || role || status);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Administrator Management</h1>
         <AddAdministratorDialog />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <ListSearch placeholder="Search by name or email..." />
+        <ListFilter paramKey="role" label="All roles" options={ROLE_OPTIONS} />
+        <ListFilter
+          paramKey="status"
+          label="All statuses"
+          options={[
+            { id: "active", name: "Enabled" },
+            { id: "inactive", name: "Disabled" },
+          ]}
+        />
       </div>
 
       <Table>
@@ -70,7 +103,11 @@ export default async function AdministratorsPage() {
           {administrators?.length === 0 && (
             <TableRow>
               <TableCell colSpan={5}>
-                <EmptyState icon={UserCog} title="No administrators yet" message="Add a coach, medical staff, or admin to get started." />
+                {hasFilters ? (
+                  <EmptyState icon={UserCog} title="No administrators match your search" message="Try a different name or clear the filters." />
+                ) : (
+                  <EmptyState icon={UserCog} title="No administrators yet" message="Add a coach, medical staff, or admin to get started." />
+                )}
               </TableCell>
             </TableRow>
           )}

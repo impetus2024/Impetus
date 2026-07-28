@@ -11,6 +11,7 @@ import {
   Package2,
   ClipboardCheck,
   HeartPulse,
+  Sparkles,
   Baby,
 } from "lucide-react";
 
@@ -33,7 +34,8 @@ export const CENTRE_ADMIN_NAV: NavGroup[] = [
       { href: "/centre-admin/gate-pass", label: "Gate Pass", icon: DoorOpen },
       { href: "/centre-admin/batches", label: "Batch Management", icon: CalendarCheck },
       { href: "/centre-admin/players", label: "Player Management", icon: Users },
-      { href: "/centre-admin/player-types", label: "Player Type", icon: Tag },
+      { href: "/centre-admin/player-types", label: "Program Type", icon: Tag },
+      { href: "/centre-admin/5s-model", label: "5S Model", icon: Sparkles },
     ],
   },
   {
@@ -54,6 +56,7 @@ export const COACH_NAV: NavGroup[] = [
       { href: "/coach/batches", label: "Training Batch", icon: CalendarCheck },
       { href: "/coach/attendance", label: "Attendance", icon: ClipboardCheck },
       { href: "/coach/injuries", label: "Injuries", icon: HeartPulse },
+      { href: "/coach/5s-model", label: "5S Model", icon: Sparkles },
     ],
   },
 ];

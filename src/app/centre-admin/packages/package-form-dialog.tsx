@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { selectLabel } from "@/lib/utils";
 import type { PackageFormState } from "./actions";
 
 type Option = { id: string; name: string };
@@ -58,13 +59,15 @@ export function PackageFormDialog({
               <Input id="name" name="name" defaultValue={defaultValues?.name} required />
             </Field>
             <Field>
-              <FieldLabel htmlFor="playerTypeId">Player Type</FieldLabel>
+              <FieldLabel htmlFor="playerTypeId">Program Type</FieldLabel>
               <Select
                 name="playerTypeId"
                 defaultValue={defaultValues?.playerTypeId ?? undefined}
               >
                 <SelectTrigger id="playerTypeId" className="w-full">
-                  <SelectValue placeholder="Select player type" />
+                  <SelectValue placeholder="Select program type">
+                    {selectLabel(playerTypes, "Select program type")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {playerTypes.map((p) => (

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/utils";
 
 export function ChildSelect({
   options,
@@ -30,7 +31,9 @@ export function ChildSelect({
       }}
     >
       <SelectTrigger className="w-56">
-        <SelectValue placeholder="Select child" />
+        <SelectValue placeholder="Select child">
+          {selectLabel(options, "Select child")}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((c) => (

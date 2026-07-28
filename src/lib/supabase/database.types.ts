@@ -225,6 +225,309 @@ export type Database = {
         }
         Relationships: []
       }
+      five_s_category_notes: {
+        Row: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          centre_id: string
+          id: string
+          player_id: string
+          recorded_at: string
+          recorded_by: string
+          remarks: string
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          centre_id: string
+          id?: string
+          player_id: string
+          recorded_at?: string
+          recorded_by: string
+          remarks: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["five_s_category"]
+          centre_id?: string
+          id?: string
+          player_id?: string
+          recorded_at?: string
+          recorded_by?: string
+          remarks?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_category_notes_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_category_notes_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_category_notes_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_group_notes: {
+        Row: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          centre_id: string
+          group_name: string
+          id: string
+          player_id: string
+          recorded_at: string
+          recorded_by: string
+          remarks: string
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          centre_id: string
+          group_name: string
+          id?: string
+          player_id: string
+          recorded_at?: string
+          recorded_by: string
+          remarks: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["five_s_category"]
+          centre_id?: string
+          group_name?: string
+          id?: string
+          player_id?: string
+          recorded_at?: string
+          recorded_by?: string
+          remarks?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_group_notes_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_group_notes_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_group_notes_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_question_responses: {
+        Row: {
+          answer: Database["public"]["Enums"]["five_s_answer_scale"]
+          centre_id: string
+          id: string
+          player_id: string
+          question_id: string
+          recorded_at: string
+          recorded_by: string
+          updated_at: string
+        }
+        Insert: {
+          answer: Database["public"]["Enums"]["five_s_answer_scale"]
+          centre_id: string
+          id?: string
+          player_id: string
+          question_id: string
+          recorded_at?: string
+          recorded_by: string
+          updated_at?: string
+        }
+        Update: {
+          answer?: Database["public"]["Enums"]["five_s_answer_scale"]
+          centre_id?: string
+          id?: string
+          player_id?: string
+          question_id?: string
+          recorded_at?: string
+          recorded_by?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_question_responses_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_question_responses_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_question_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_question_responses_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_questions: {
+        Row: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          created_at: string
+          display_order: number
+          id: string
+          question: string
+          section: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          created_at?: string
+          display_order?: number
+          id?: string
+          question: string
+          section: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["five_s_category"]
+          created_at?: string
+          display_order?: number
+          id?: string
+          question?: string
+          section?: string
+        }
+        Relationships: []
+      }
+      five_s_results: {
+        Row: {
+          centre_id: string
+          id: string
+          player_id: string
+          recorded_at: string
+          recorded_by: string
+          remarks: string | null
+          score: number
+          test_id: string
+          updated_at: string
+          vo2_max: number | null
+        }
+        Insert: {
+          centre_id: string
+          id?: string
+          player_id: string
+          recorded_at?: string
+          recorded_by: string
+          remarks?: string | null
+          score: number
+          test_id: string
+          updated_at?: string
+          vo2_max?: number | null
+        }
+        Update: {
+          centre_id?: string
+          id?: string
+          player_id?: string
+          recorded_at?: string
+          recorded_by?: string
+          remarks?: string | null
+          score?: number
+          test_id?: string
+          updated_at?: string
+          vo2_max?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_results_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_results_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_results_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_results_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_tests: {
+        Row: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          created_at: string
+          display_order: number
+          group_name: string | null
+          id: string
+          is_required: boolean
+          name: string
+          unit: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          created_at?: string
+          display_order?: number
+          group_name?: string | null
+          id?: string
+          is_required?: boolean
+          name: string
+          unit: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["five_s_category"]
+          created_at?: string
+          display_order?: number
+          group_name?: string | null
+          id?: string
+          is_required?: boolean
+          name?: string
+          unit?: string
+        }
+        Relationships: []
+      }
       gate_pass_logs: {
         Row: {
           action: Database["public"]["Enums"]["gate_pass_action"]
@@ -819,6 +1122,8 @@ export type Database = {
     }
     Enums: {
       attendance_status: "present" | "absent"
+      five_s_answer_scale: "rarely" | "sometimes" | "frequently" | "always"
+      five_s_category: "speed" | "stamina" | "strength" | "spirit" | "skill"
       gate_pass_action: "check_in" | "check_out"
       user_role: "super_admin" | "centre_admin" | "coach" | "medical" | "parent"
     }
@@ -952,6 +1257,8 @@ export const Constants = {
   public: {
     Enums: {
       attendance_status: ["present", "absent"],
+      five_s_answer_scale: ["rarely", "sometimes", "frequently", "always"],
+      five_s_category: ["speed", "stamina", "strength", "spirit", "skill"],
       gate_pass_action: ["check_in", "check_out"],
       user_role: ["super_admin", "centre_admin", "coach", "medical", "parent"],
     },

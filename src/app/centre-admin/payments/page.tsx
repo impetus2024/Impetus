@@ -2,6 +2,8 @@ import { Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { EmptyState } from "@/components/empty-state";
+import { ListSearch } from "@/components/list-search";
+import { ListFilter } from "@/components/list-filter";
 import {
   Table,
   TableBody,
@@ -12,16 +14,25 @@ import {
 } from "@/components/ui/table";
 import { AddPaymentDialog } from "./add-payment-dialog";
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; packageId?: string }>;
+}) {
   const centreAdmin = await requireRole("centre_admin");
+  const { q, packageId } = await searchParams;
   const supabase = await createClient();
 
+  let query = supabase
+    .from("payments")
+    .select("id, amount, payment_date, notes, players!inner(name), packages(name)")
+    .eq("centre_id", centreAdmin.centre_id!);
+
+  if (q) query = query.ilike("players.name", `%${q}%`);
+  if (packageId) query = query.eq("package_id", packageId);
+
   const [{ data: payments }, { data: players }, { data: packages }] = await Promise.all([
-    supabase
-      .from("payments")
-      .select("id, amount, payment_date, notes, players(name), packages(name)")
-      .eq("centre_id", centreAdmin.centre_id!)
-      .order("payment_date", { ascending: false }),
+    query.order("payment_date", { ascending: false }),
     supabase
       .from("players")
       .select("id, name")
@@ -36,11 +47,18 @@ export default async function PaymentsPage() {
       .order("name"),
   ]);
 
+  const hasFilters = Boolean(q || packageId);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Payment History</h1>
         <AddPaymentDialog players={players ?? []} packages={packages ?? []} />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <ListSearch placeholder="Search by player..." />
+        <ListFilter paramKey="packageId" label="All packages" options={packages ?? []} />
       </div>
 
       <Table>
@@ -66,7 +84,11 @@ export default async function PaymentsPage() {
           {payments?.length === 0 && (
             <TableRow>
               <TableCell colSpan={5}>
-                <EmptyState icon={Wallet} title="No payments recorded yet" />
+                {hasFilters ? (
+                  <EmptyState icon={Wallet} title="No payments match your search" message="Try a different name or clear the filters." />
+                ) : (
+                  <EmptyState icon={Wallet} title="No payments recorded yet" />
+                )}
               </TableCell>
             </TableRow>
           )}

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { ListSearch } from "@/components/list-search";
+import { ListFilter } from "@/components/list-filter";
 import {
   Table,
   TableBody,
@@ -14,20 +16,52 @@ import {
 } from "@/components/ui/table";
 import { AddInjuryDialog } from "@/components/injuries/add-injury-dialog";
 
-export default async function MedicalInjuriesPage() {
+export default async function MedicalInjuriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; ageCategoryId?: string; playerTypeId?: string }>;
+}) {
   const medical = await requireRole("medical");
+  const { q, ageCategoryId, playerTypeId } = await searchParams;
   const supabase = await createClient();
 
-  const { data: players } = await supabase
+  let query = supabase
     .from("players")
     .select("id, name, age_categories(name), player_types(name)")
     .eq("centre_id", medical.centre_id!)
-    .eq("is_active", true)
-    .order("name");
+    .eq("is_active", true);
+
+  if (q) query = query.ilike("name", `%${q}%`);
+  if (ageCategoryId) query = query.eq("age_category_id", ageCategoryId);
+  if (playerTypeId) query = query.eq("player_type_id", playerTypeId);
+
+  const [{ data: players }, { data: ageCategories }, { data: playerTypes }] = await Promise.all([
+    query.order("name"),
+    supabase
+      .from("age_categories")
+      .select("id, name")
+      .eq("centre_id", medical.centre_id!)
+      .eq("is_active", true)
+      .order("name"),
+    supabase
+      .from("player_types")
+      .select("id, name")
+      .eq("centre_id", medical.centre_id!)
+      .eq("is_active", true)
+      .order("name"),
+  ]);
+
+  const hasFilters = Boolean(q || ageCategoryId || playerTypeId);
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Injuries</h1>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <ListSearch placeholder="Search players..." />
+        <ListFilter paramKey="ageCategoryId" label="All age categories" options={ageCategories ?? []} />
+        <ListFilter paramKey="playerTypeId" label="All program types" options={playerTypes ?? []} />
+      </div>
 
       <Table>
         <TableHeader>
@@ -35,7 +69,7 @@ export default async function MedicalInjuriesPage() {
             <TableHead>Player ID</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Age Category</TableHead>
-            <TableHead>Player Type</TableHead>
+            <TableHead>Program Type</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -63,7 +97,11 @@ export default async function MedicalInjuriesPage() {
           {players?.length === 0 && (
             <TableRow>
               <TableCell colSpan={5}>
-                <EmptyState icon={Users} title="No players yet" />
+                {hasFilters ? (
+                  <EmptyState icon={Users} title="No players match your search" message="Try a different name or clear the filters." />
+                ) : (
+                  <EmptyState icon={Users} title="No players yet" />
+                )}
               </TableCell>
             </TableRow>
           )}

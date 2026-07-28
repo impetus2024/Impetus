@@ -33,7 +33,7 @@ export default async function CoachBatchesPage() {
           <TableRow>
             <TableHead>Batch</TableHead>
             <TableHead>Age Category</TableHead>
-            <TableHead>Player Type</TableHead>
+            <TableHead>Program Type</TableHead>
             <TableHead>Time</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>

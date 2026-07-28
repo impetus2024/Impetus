@@ -50,7 +50,7 @@ export default async function PackagesPage() {
         <TableHeader>
           <TableRow>
             <TableHead>Package</TableHead>
-            <TableHead>Player Type</TableHead>
+            <TableHead>Program Type</TableHead>
             <TableHead>Price</TableHead>
             <TableHead>Duration</TableHead>
             <TableHead>Status</TableHead>

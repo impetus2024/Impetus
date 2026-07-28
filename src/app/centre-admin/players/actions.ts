@@ -299,6 +299,182 @@ export async function updatePlayer(
   return undefined;
 }
 
+const PlayerProfileSchema = z.object({
+  name: z.string().min(1, { error: "Name is required." }),
+  dateOfBirth: z.string().min(1, { error: "Date of birth is required." }),
+  ageCategoryId: z.string().optional(),
+  email: z.email({ error: "Enter a valid player email." }).optional(),
+  contactNumber: z.string().optional(),
+  playerTypeId: z.string().optional(),
+  packageId: z.string().optional(),
+  batchId: z.string().optional(),
+  gender: z.string().optional(),
+  bloodGroup: z.string().optional(),
+  heightCm: z.coerce.number().optional(),
+  weightKg: z.coerce.number().optional(),
+  birthMark: z.string().optional(),
+  medicalCondition: z.string().optional(),
+  foodAllergy: z.string().optional(),
+  aiffNumber: z.string().optional(),
+  passportNumber: z.string().optional(),
+  aadhaarNumber: z.string().optional(),
+});
+
+export async function updatePlayerProfile(
+  id: string,
+  _prev: PlayerFormState,
+  formData: FormData
+): Promise<PlayerFormState> {
+  const centreAdmin = await requireRole("centre_admin");
+  const parsed = PlayerProfileSchema.safeParse({
+    name: formData.get("name"),
+    dateOfBirth: formData.get("dateOfBirth"),
+    ageCategoryId: optionalStr(formData.get("ageCategoryId")),
+    email: optionalStr(formData.get("email")),
+    contactNumber: optionalStr(formData.get("contactNumber")),
+    playerTypeId: optionalStr(formData.get("playerTypeId")),
+    packageId: optionalStr(formData.get("packageId")),
+    batchId: optionalStr(formData.get("batchId")),
+    gender: optionalStr(formData.get("gender")),
+    bloodGroup: optionalStr(formData.get("bloodGroup")),
+    heightCm: optionalStr(formData.get("heightCm")),
+    weightKg: optionalStr(formData.get("weightKg")),
+    birthMark: optionalStr(formData.get("birthMark")),
+    medicalCondition: optionalStr(formData.get("medicalCondition")),
+    foodAllergy: optionalStr(formData.get("foodAllergy")),
+    aiffNumber: optionalStr(formData.get("aiffNumber")),
+    passportNumber: optionalStr(formData.get("passportNumber")),
+    aadhaarNumber: optionalStr(formData.get("aadhaarNumber")),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+
+  const update: PlayerUpdate = {
+    name: d.name,
+    date_of_birth: d.dateOfBirth,
+    age_category_id: d.ageCategoryId ?? null,
+    email: d.email ?? null,
+    contact_number: d.contactNumber ?? null,
+    player_type_id: d.playerTypeId ?? null,
+    package_id: d.packageId ?? null,
+    batch_id: d.batchId ?? null,
+    gender: d.gender ?? null,
+    blood_group: d.bloodGroup ?? null,
+    height_cm: d.heightCm ?? null,
+    weight_kg: d.weightKg ?? null,
+    birth_mark: d.birthMark ?? null,
+    medical_condition: d.medicalCondition ?? null,
+    food_allergy: d.foodAllergy ?? null,
+    aiff_number: d.aiffNumber ?? null,
+  };
+
+  if (d.passportNumber) {
+    update.passport_number_encrypted = encryptField(d.passportNumber);
+  }
+  if (d.aadhaarNumber) {
+    update.aadhaar_number_encrypted = encryptField(d.aadhaarNumber);
+  }
+
+  type DocColumn = "aadhaar_doc_path" | "medical_records_path" | "profile_picture_path";
+  const docFields: { formKey: string; column: DocColumn }[] = [
+    { formKey: "aadhaarDoc", column: "aadhaar_doc_path" },
+    { formKey: "medicalRecords", column: "medical_records_path" },
+    { formKey: "profilePicture", column: "profile_picture_path" },
+  ];
+
+  for (const { formKey, column } of docFields) {
+    const file = formData.get(formKey);
+    if (file instanceof File && file.size > 0) {
+      try {
+        update[column] = await uploadFile(file, `player-documents/${id}`);
+      } catch {
+        // storage not configured — leave existing document as-is
+      }
+    }
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("players")
+    .update(update)
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!);
+
+  if (error) {
+    return { error: "Failed to save player profile." };
+  }
+
+  revalidatePath(PATH);
+  revalidatePath(`/centre-admin/players/${id}`);
+  return undefined;
+}
+
+const ParentProfileSchema = z.object({
+  fatherName: z.string().optional(),
+  motherName: z.string().optional(),
+  parentContactNumber: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  country: z.string().optional(),
+  state: z.string().optional(),
+  city: z.string().optional(),
+  pincode: z.string().optional(),
+});
+
+export async function updateParentProfile(
+  id: string,
+  _prev: PlayerFormState,
+  formData: FormData
+): Promise<PlayerFormState> {
+  const centreAdmin = await requireRole("centre_admin");
+  const parsed = ParentProfileSchema.safeParse({
+    fatherName: optionalStr(formData.get("fatherName")),
+    motherName: optionalStr(formData.get("motherName")),
+    parentContactNumber: optionalStr(formData.get("parentContactNumber")),
+    addressLine1: optionalStr(formData.get("addressLine1")),
+    addressLine2: optionalStr(formData.get("addressLine2")),
+    country: optionalStr(formData.get("country")),
+    state: optionalStr(formData.get("state")),
+    city: optionalStr(formData.get("city")),
+    pincode: optionalStr(formData.get("pincode")),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+
+  const update: PlayerUpdate = {
+    father_name: d.fatherName ?? null,
+    mother_name: d.motherName ?? null,
+    parent_contact_number: d.parentContactNumber ?? null,
+    address_line1: d.addressLine1 ?? null,
+    address_line2: d.addressLine2 ?? null,
+    country: d.country ?? null,
+    state: d.state ?? null,
+    city: d.city ?? null,
+    pincode: d.pincode ?? null,
+  };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("players")
+    .update(update)
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!);
+
+  if (error) {
+    return { error: "Failed to save parent profile." };
+  }
+
+  revalidatePath(PATH);
+  revalidatePath(`/centre-admin/players/${id}`);
+  return undefined;
+}
+
 export async function setPlayerActive(id: string, active: boolean) {
   const centreAdmin = await requireRole("centre_admin");
   const supabase = await createClient();

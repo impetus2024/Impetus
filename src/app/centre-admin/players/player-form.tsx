@@ -20,6 +20,7 @@ import {
   FieldLegend,
   FieldSeparator,
 } from "@/components/ui/field";
+import { selectLabel } from "@/lib/utils";
 import type { PlayerFormState } from "./actions";
 
 type Option = { id: string; name: string };
@@ -99,7 +100,9 @@ export function PlayerForm({
             <FieldLabel htmlFor="ageCategoryId">Age Category</FieldLabel>
             <Select name="ageCategoryId" defaultValue={defaultValues?.ageCategoryId ?? undefined}>
               <SelectTrigger id="ageCategoryId" className="w-full">
-                <SelectValue placeholder="Select age category" />
+                <SelectValue placeholder="Select age category">
+                  {selectLabel(ageCategories, "Select age category")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ageCategories.map((o) => (
@@ -119,10 +122,12 @@ export function PlayerForm({
             <Input id="contactNumber" name="contactNumber" defaultValue={defaultValues?.contactNumber ?? ""} />
           </Field>
           <Field orientation="responsive">
-            <FieldLabel htmlFor="playerTypeId">Player Type</FieldLabel>
+            <FieldLabel htmlFor="playerTypeId">Program Type</FieldLabel>
             <Select name="playerTypeId" defaultValue={defaultValues?.playerTypeId ?? undefined}>
               <SelectTrigger id="playerTypeId" className="w-full">
-                <SelectValue placeholder="Select player type" />
+                <SelectValue placeholder="Select program type">
+                  {selectLabel(playerTypes, "Select program type")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {playerTypes.map((o) => (
@@ -137,7 +142,9 @@ export function PlayerForm({
             <FieldLabel htmlFor="packageId">Package</FieldLabel>
             <Select name="packageId" defaultValue={defaultValues?.packageId ?? undefined}>
               <SelectTrigger id="packageId" className="w-full">
-                <SelectValue placeholder="Select package" />
+                <SelectValue placeholder="Select package">
+                  {selectLabel(packages, "Select package")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {packages.map((o) => (
@@ -152,7 +159,9 @@ export function PlayerForm({
             <FieldLabel htmlFor="batchId">Batch Allotment</FieldLabel>
             <Select name="batchId" defaultValue={defaultValues?.batchId ?? undefined}>
               <SelectTrigger id="batchId" className="w-full">
-                <SelectValue placeholder="Select batch" />
+                <SelectValue placeholder="Select batch">
+                  {selectLabel(batches, "Select batch")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {batches.map((o) => (

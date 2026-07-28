@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/utils";
 
 export function CentreSelect({
   centres,
@@ -26,7 +27,9 @@ export function CentreSelect({
       }}
     >
       <SelectTrigger className="w-56">
-        <SelectValue placeholder="Select centre" />
+        <SelectValue placeholder="Select centre">
+          {selectLabel(centres, "Select centre")}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {centres.map((c) => (

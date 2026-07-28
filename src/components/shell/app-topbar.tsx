@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sheet,
@@ -41,6 +42,12 @@ import { logout } from "@/lib/auth/actions";
 import { BrandMark } from "./brand-mark";
 import { SidebarNavContent } from "./sidebar-nav-content";
 import { NAV_BY_KEY, type NavGroup, type NavKey } from "./nav-config";
+
+// Floating white circular icon-chip look used for standalone icon actions
+// in the topbar (menu trigger, notifications, theme toggle) — matches the
+// reference design's search/filter/bell buttons, distinct from a plain
+// ghost button that's only visible on hover.
+const ICON_CHIP_BUTTON = "rounded-full bg-card shadow-sm hover:bg-muted";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -93,7 +100,7 @@ export function AppTopbar({
       {/* Mobile nav trigger */}
       <Sheet>
         <SheetTrigger
-          render={<button className={buttonVariants({ variant: "ghost", size: "icon", className: "lg:hidden" })} />}
+          render={<button className={buttonVariants({ variant: "ghost", size: "icon", className: cn(ICON_CHIP_BUTTON, "lg:hidden") })} />}
         >
           <Menu className="size-5" />
           <span className="sr-only">Open navigation</span>
@@ -173,7 +180,7 @@ export function AppTopbar({
       {/* Notifications */}
       <Popover>
         <PopoverTrigger
-          render={<button className={buttonVariants({ variant: "ghost", size: "icon", className: "relative" })} />}
+          render={<button className={buttonVariants({ variant: "ghost", size: "icon", className: cn(ICON_CHIP_BUTTON, "relative") })} />}
         >
           <Bell className="size-[18px]" />
           <span className="sr-only">Notifications</span>
@@ -187,6 +194,7 @@ export function AppTopbar({
       <Button
         variant="ghost"
         size="icon"
+        className={ICON_CHIP_BUTTON}
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
       >
         <Sun className="size-[18px] scale-100 dark:scale-0" />

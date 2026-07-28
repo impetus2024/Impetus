@@ -30,17 +30,17 @@ export default async function PlayerTypesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Player Type</h1>
+      <h1 className="text-2xl font-semibold">Program Type</h1>
 
       <Tabs defaultValue="player-types">
         <TabsList>
-          <TabsTrigger value="player-types">Player Type</TabsTrigger>
+          <TabsTrigger value="player-types">Program Type</TabsTrigger>
           <TabsTrigger value="age-categories">Age Category</TabsTrigger>
         </TabsList>
         <TabsContent value="player-types">
           <LookupManager
             items={playerTypes ?? []}
-            itemLabel="Player Type"
+            itemLabel="Program Type"
             createAction={createPlayerType}
             renameAction={renamePlayerType}
             toggleAction={setPlayerTypeActive}

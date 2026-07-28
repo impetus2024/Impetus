@@ -1,5 +1,6 @@
 import { CalendarCheck, DoorOpen, ClipboardCheck, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/dal";
 import { getParentChildren } from "@/lib/parent/children";
 import { StatCard } from "@/components/stat-card";
@@ -41,13 +42,15 @@ export default async function ParentDashboard({
 async function ChildMetrics({ playerId }: { playerId: string }) {
   const supabase = await createClient();
 
+  // RLS-scoped: only resolves if this player is actually linked to the
+  // signed-in parent (see the "parents view own children" policy).
   const { data: player } = await supabase
     .from("players")
-    .select("name, is_checked_in, batches(name)")
+    .select("name, is_checked_in, batch_id")
     .eq("id", playerId)
     .maybeSingle();
 
-  const [attendance, lastPayment] = await Promise.all([
+  const [attendance, lastPayment, batch] = await Promise.all([
     supabase
       .from("attendance")
       .select("status")
@@ -61,10 +64,21 @@ async function ChildMetrics({ playerId }: { playerId: string }) {
       .order("payment_date", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // batches has no RLS policy for the parent role — adding one that
+    // subqueries players would recreate the same policy cycle documented
+    // on parent_player_links ("coach views players in own batches" already
+    // subqueries batches, so batches subquerying players back is circular).
+    // We already confirmed above (via RLS) that this player belongs to
+    // this parent, so a narrow admin-client lookup of just the batch name
+    // is safe and avoids that cycle entirely.
+    player?.batch_id
+      ? createAdminClient().from("batches").select("name").eq("id", player.batch_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const presentCount = (attendance.data ?? []).filter((a) => a.status === "present").length;
   const totalSessions = attendance.data?.length ?? 0;
+  const batchName = batch.data?.name ?? null;
 
   return (
     <>
@@ -74,12 +88,12 @@ async function ChildMetrics({ playerId }: { playerId: string }) {
         message={
           player?.is_checked_in
             ? "Currently checked in at the centre."
-            : `Batch: ${player?.batches?.name ?? "Not assigned yet"}`
+            : `Batch: ${batchName ?? "Not assigned yet"}`
         }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Batch" value={player?.batches?.name ?? "—"} icon={CalendarCheck} />
+        <StatCard label="Batch" value={batchName ?? "—"} icon={CalendarCheck} />
         <StatCard
           label="Gate Status"
           value={player?.is_checked_in ? "Checked In" : "Checked Out"}
