@@ -15,7 +15,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddCentreDialog } from "./add-centre-dialog";
+import { EditCentreDialog } from "./edit-centre-dialog";
 import { InviteAdminDialog } from "./invite-admin-dialog";
+import { CentreStatusToggle } from "./centre-status-toggle";
 
 export default async function CentresPage({
   searchParams,
@@ -105,7 +107,11 @@ export default async function CentresPage({
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <InviteAdminDialog centreId={centre.id} centreName={centre.name} />
+                <div className="flex justify-end gap-2">
+                  <EditCentreDialog centre={centre} />
+                  <InviteAdminDialog centreId={centre.id} centreName={centre.name} />
+                  <CentreStatusToggle centreId={centre.id} isActive={centre.is_active} />
+                </div>
               </TableCell>
             </TableRow>
           ))}
