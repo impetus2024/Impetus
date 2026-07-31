@@ -1,6 +1,7 @@
 import { HeartPulse } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getSignedFileUrl } from "@/lib/storage/r2";
+import { logError } from "@/lib/logger";
 import { EmptyState } from "@/components/empty-state";
 import {
   Table,
@@ -15,7 +16,8 @@ async function safeSignedUrl(key: string | null) {
   if (!key) return null;
   try {
     return await getSignedFileUrl(key);
-  } catch {
+  } catch (err) {
+    logError(`Failed to sign injury report URL (${key}):`, err);
     return null;
   }
 }

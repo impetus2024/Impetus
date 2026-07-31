@@ -1,16 +1,13 @@
-import { Shield } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 export function BrandMark({ collapsed = false }: { collapsed?: boolean }) {
   return (
-    <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")}>
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary shadow-sm">
-        <Shield className="size-[18px] text-sidebar-primary-foreground" fill="currentColor" fillOpacity={0.18} />
-      </div>
-      {!collapsed && (
-        <span className="text-base font-semibold tracking-tight text-sidebar-foreground">
-          Impetus
-        </span>
+    <div className={cn("flex items-center", collapsed && "justify-center")}>
+      {collapsed ? (
+        <Image src="/logo-icon.png" alt="Impetus" width={36} height={36} className="size-9" priority />
+      ) : (
+        <Image src="/logo.png" alt="Impetus" width={1071} height={418} className="h-8 w-auto" priority />
       )}
     </div>
   );

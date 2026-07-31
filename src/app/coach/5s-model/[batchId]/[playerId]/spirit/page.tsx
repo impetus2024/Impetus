@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
+import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
+import { getFiveSQuestions } from "@/lib/five-s/catalog";
 import { SpiritResponseForm } from "./spirit-response-form";
 
 export default async function Coach5sModelSpiritPage({
@@ -18,7 +21,7 @@ export default async function Coach5sModelSpiritPage({
 
   const { data: batch } = await supabase
     .from("batches")
-    .select("id, name")
+    .select("id, name, centre_id")
     .eq("id", batchId)
     .eq("head_coach_id", coach.id)
     .maybeSingle();
@@ -34,17 +37,21 @@ export default async function Coach5sModelSpiritPage({
 
   if (!player) notFound();
 
-  const [{ data: questions }, { data: responses }] = await Promise.all([
-    supabase
-      .from("five_s_questions")
-      .select("id, section, question")
-      .eq("category", "spirit")
-      .order("display_order"),
+  const { data: centre } = await supabase
+    .from("centres")
+    .select("five_s_window_start, five_s_window_end")
+    .eq("id", batch.centre_id)
+    .single();
+  const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
+
+  const [allQuestions, { data: responses }] = await Promise.all([
+    getFiveSQuestions(),
     supabase
       .from("five_s_question_responses")
       .select("question_id, answer")
       .eq("player_id", playerId),
   ]);
+  const questions = allQuestions.filter((q) => q.category === "spirit");
 
   const existingByQuestion = new Map((responses ?? []).map((r) => [r.question_id, r.answer]));
 
@@ -66,16 +73,20 @@ export default async function Coach5sModelSpiritPage({
         </div>
       </div>
 
-      <Card className="rounded-2xl border-border/50 py-6 shadow-soft">
-        <CardContent className="px-6">
-          <SpiritResponseForm
-            batchId={batchId}
-            playerId={playerId}
-            questions={questions ?? []}
-            existingByQuestion={existingByQuestion}
-          />
-        </CardContent>
-      </Card>
+      {windowStatus.status === "open" ? (
+        <Card className="rounded-2xl border-border/50 py-6 shadow-soft">
+          <CardContent className="px-6">
+            <SpiritResponseForm
+              batchId={batchId}
+              playerId={playerId}
+              questions={questions}
+              existingByQuestion={existingByQuestion}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <TestingWindowBanner status={windowStatus} />
+      )}
     </div>
   );
 }

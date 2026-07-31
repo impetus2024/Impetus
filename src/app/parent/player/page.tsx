@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/dal";
 import { getParentChildren } from "@/lib/parent/children";
-import { getSignedFileUrl } from "@/lib/storage/r2";
+import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
 import { Card, CardContent } from "@/components/ui/card";
 import { InjuryReportsTable } from "@/components/injuries/injury-reports-table";
 import { PackagesSection } from "@/components/profile/packages-section";
@@ -95,28 +96,11 @@ async function PlayerProfileSections({
     resolveOne(admin, "batches", player.batch_id),
   ]);
 
-  const documentLinks: Record<string, string> = {};
-  if (player.profile_picture_path) {
-    try {
-      documentLinks.profilePicture = await getSignedFileUrl(player.profile_picture_path);
-    } catch {
-      // storage not configured — link omitted
-    }
-  }
-  if (player.aadhaar_doc_path) {
-    try {
-      documentLinks.aadhaar = await getSignedFileUrl(player.aadhaar_doc_path);
-    } catch {
-      // storage not configured — link omitted
-    }
-  }
-  if (player.medical_records_path) {
-    try {
-      documentLinks.medicalRecords = await getSignedFileUrl(player.medical_records_path);
-    } catch {
-      // storage not configured — link omitted
-    }
-  }
+  const documentLinks = await resolveDocumentLinks({
+    profilePicture: player.profile_picture_path,
+    aadhaar: player.aadhaar_doc_path,
+    medicalRecords: player.medical_records_path,
+  });
 
   const basePath = `/parent/player?playerId=${playerId}`;
 
@@ -213,7 +197,19 @@ async function PlayerProfileSections({
             </div>
           )}
 
-          {section === "5s" && <FiveSResultsView playerId={playerId} />}
+          {section === "5s" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-end">
+                <Link
+                  href={`/parent/5s-model?playerId=${playerId}`}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Open full results page
+                </Link>
+              </div>
+              <FiveSResultsView playerId={playerId} gateUntilPublished />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

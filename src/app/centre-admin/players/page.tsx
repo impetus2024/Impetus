@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -21,15 +23,17 @@ import { PlayerRowActions } from "./row-actions";
 export default async function PlayersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; batchId?: string; playerTypeId?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; batchId?: string; playerTypeId?: string; status?: string; page?: string }>;
 }) {
   const centreAdmin = await requireRole("centre_admin");
-  const { q, batchId, playerTypeId, status } = await searchParams;
+  const { q, batchId, playerTypeId, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
   let query = supabase
     .from("players")
-    .select("id, name, date_of_birth, is_active, batches(name), player_types(name)")
+    .select("id, name, date_of_birth, is_active, batches(name), player_types(name)", { count: "exact" })
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (q) query = query.ilike("name", `%${q}%`);
@@ -38,8 +42,8 @@ export default async function PlayersPage({
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
 
-  const [{ data: players }, { data: batches }, { data: playerTypes }] = await Promise.all([
-    query.order("name"),
+  const [{ data: players, count }, { data: batches }, { data: playerTypes }] = await Promise.all([
+    query.order("name").range(from, to),
     supabase
       .from("batches")
       .select("id, name")
@@ -116,6 +120,8 @@ export default async function PlayersPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }

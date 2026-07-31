@@ -4,9 +4,10 @@ import * as z from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { uploadFile } from "@/lib/storage/r2";
+import { uploadFile, UploadValidationError } from "@/lib/storage/r2";
 import { provisionUser } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
+import { logError } from "@/lib/logger";
 
 const CentreSchema = z.object({
   name: z.string().min(1, { error: "Centre name is required." }),
@@ -27,7 +28,7 @@ export async function createCentre(
   _prev: CentreFormState,
   formData: FormData
 ): Promise<CentreFormState> {
-  await requireRole("super_admin");
+  const superAdmin = await requireRole("super_admin");
 
   const parsed = CentreSchema.safeParse({
     name: formData.get("name"),
@@ -46,6 +47,9 @@ export async function createCentre(
   if (!(logo instanceof File) || logo.size === 0) {
     return { error: "Centre logo is required." };
   }
+  if (!["image/jpeg", "image/png", "image/webp"].includes(logo.type)) {
+    return { error: "Logo must be a JPG, PNG, or WebP image." };
+  }
 
   const supabase = await createClient();
   const { data: centre, error } = await supabase
@@ -60,20 +64,24 @@ export async function createCentre(
     .single();
 
   if (error || !centre) {
+    logError(`Failed to create centre "${parsed.data.name}":`, error);
     return { error: "Failed to create centre." };
   }
 
   const warnings: string[] = [];
 
   try {
-    const logoKey = await uploadFile(logo, `centre-logos/${centre.id}`);
+    const logoKey = await uploadFile(logo, `centre-logos/${centre.id}`, "public", superAdmin.id);
     await supabase
       .from("centres")
       .update({ logo_path: logoKey })
       .eq("id", centre.id);
-  } catch {
+  } catch (err) {
+    logError(`Logo upload failed for centre ${centre.id}:`, err);
     warnings.push(
-      "logo upload failed (storage isn't configured yet) — add it later"
+      err instanceof UploadValidationError
+        ? err.message
+        : "logo upload failed (storage isn't configured yet) — add it later"
     );
   }
 
@@ -87,7 +95,8 @@ export async function createCentre(
       centreId: centre.id,
       loginUrl: absoluteUrl("/login"),
     });
-  } catch {
+  } catch (err) {
+    logError(`Failed to provision first admin for centre ${centre.id}:`, err);
     warnings.push("failed to create the Centre Admin account — add one from the centre's row instead");
   }
 
@@ -128,7 +137,8 @@ export async function inviteCentreAdmin(
       centreId,
       loginUrl: absoluteUrl("/login"),
     });
-  } catch {
+  } catch (err) {
+    logError(`Failed to invite centre admin for centre ${centreId}:`, err);
     return { error: "Failed to create the Centre Admin account." };
   }
 

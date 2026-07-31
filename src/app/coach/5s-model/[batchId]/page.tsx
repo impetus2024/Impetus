@@ -39,6 +39,23 @@ export default async function Coach5sModelBatchPage({
     .eq("is_active", true)
     .order("name");
 
+  const playerIds = (players ?? []).map((p) => p.id);
+  // "View Scores" only makes sense once there's something to view — a
+  // player shows up here as soon as any test score or spirit-question
+  // response has been recorded for them, across either table since a
+  // category might only have one or the other (spirit is questions-only).
+  const [{ data: resultRows }, { data: responseRows }] =
+    playerIds.length > 0
+      ? await Promise.all([
+          supabase.from("five_s_results").select("player_id").in("player_id", playerIds),
+          supabase.from("five_s_question_responses").select("player_id").in("player_id", playerIds),
+        ])
+      : [{ data: [] }, { data: [] }];
+  const playersWithScores = new Set([
+    ...(resultRows ?? []).map((r) => r.player_id),
+    ...(responseRows ?? []).map((r) => r.player_id),
+  ]);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{batch.name} — 5S Model</h1>
@@ -54,7 +71,14 @@ export default async function Coach5sModelBatchPage({
           {players?.map((p) => (
             <TableRow key={p.id}>
               <TableCell>{p.name}</TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right space-x-2">
+                {playersWithScores.has(p.id) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={<Link href={`/coach/5s-model/${batchId}/${p.id}/results`}>View Scores</Link>}
+                  />
+                )}
                 <Button
                   size="sm"
                   render={<Link href={`/coach/5s-model/${batchId}/${p.id}`}>5S Model Scores</Link>}

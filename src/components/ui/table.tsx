@@ -5,16 +5,50 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  // Hidden until there's actually overflow to hint at, and hidden again
+  // once scrolled to the end — without this, mobile users have no way to
+  // know columns like row actions exist off-screen (the container itself
+  // is overflow-x-auto, but that alone gives no visual affordance).
+  const [canScrollRight, setCanScrollRight] = React.useState(false)
+
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    function update() {
+      if (!el) return
+      setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    }
+
+    update()
+    el.addEventListener("scroll", update, { passive: true })
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => {
+      el.removeEventListener("scroll", update)
+      observer.disconnect()
+    }
+  }, [])
+
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-card"
+      className="relative w-full rounded-2xl border border-border/70 bg-card shadow-card"
     >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+      <div ref={scrollRef} className="overflow-x-auto rounded-2xl">
+        <table
+          data-slot="table"
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
+      {canScrollRight && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-2xl bg-gradient-to-l from-card to-transparent sm:hidden"
+        />
+      )}
     </div>
   )
 }

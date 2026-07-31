@@ -1,13 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
 import { FiveSPlaceholder } from "@/components/profile/five-s-placeholder";
+import { FiveSRadarSection, FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
+import { FIVE_S_CATEGORY_META } from "@/lib/five-s/categories";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  speed: "Speed",
-  stamina: "Stamina",
-  strength: "Strength",
-  spirit: "Spirit",
-  skill: "Skill",
-};
+const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(FIVE_S_CATEGORY_META).map(([key, meta]) => [key, meta.label])
+);
 
 const ANSWER_LABEL: Record<string, string> = {
   rarely: "Rarely",
@@ -19,39 +18,60 @@ const ANSWER_LABEL: Record<string, string> = {
 // Renders whichever 5S categories actually have test definitions — only
 // Speed exists today. Adding Stamina/Strength/Spirit/Skill later needs no
 // change here: this groups by whatever rows five_s_tests actually has.
-export async function FiveSResultsView({ playerId }: { playerId: string }) {
+export async function FiveSResultsView({
+  playerId,
+  gateUntilPublished = false,
+}: {
+  playerId: string;
+  /** Centre admin/parent views only — coaches always see their own data.
+   * Scores are coach-private until published (RLS enforces this on the
+   * underlying tables regardless), so this also renders a clear "not
+   * published yet" state instead of what would otherwise look like an
+   * empty/unrecorded results page. */
+  gateUntilPublished?: boolean;
+}) {
   const supabase = await createClient();
 
+  if (gateUntilPublished) {
+    const { data: report } = await supabase
+      .from("five_s_reports")
+      .select("id")
+      .eq("player_id", playerId)
+      .maybeSingle();
+    if (!report) {
+      return (
+        <FiveSPlaceholder
+          title="5S report not published yet"
+          message="The coach hasn't published this player's 5S results yet — check back once they do."
+        />
+      );
+    }
+  }
+
   const [
-    { data: tests },
+    tests,
     { data: results },
     { data: notes },
     { data: groupNotes },
-    { data: questions },
+    questions,
     { data: responses },
   ] = await Promise.all([
-    supabase
-      .from("five_s_tests")
-      .select("id, category, name, unit, group_name, display_order")
-      .order("display_order"),
+    getFiveSTests(),
     supabase
       .from("five_s_results")
-      .select("test_id, score, vo2_max, remarks, recorded_at")
+      .select("test_id, score, vo2_max, remarks, recorded_at, previous_score")
       .eq("player_id", playerId),
     supabase.from("five_s_category_notes").select("category, remarks").eq("player_id", playerId),
     supabase.from("five_s_group_notes").select("category, group_name, remarks").eq("player_id", playerId),
-    supabase
-      .from("five_s_questions")
-      .select("id, category, section, question, display_order")
-      .order("display_order"),
+    getFiveSQuestions(),
     supabase
       .from("five_s_question_responses")
       .select("question_id, answer")
       .eq("player_id", playerId),
   ]);
 
-  const hasTests = tests && tests.length > 0;
-  const hasQuestions = questions && questions.length > 0;
+  const hasTests = tests.length > 0;
+  const hasQuestions = questions.length > 0;
 
   if (!hasTests && !hasQuestions) {
     return <FiveSPlaceholder />;
@@ -64,13 +84,52 @@ export async function FiveSResultsView({ playerId }: { playerId: string }) {
   const groupNoteByKey = new Map((groupNotes ?? []).map((n) => [`${n.category}::${n.group_name}`, n.remarks]));
   const responseByQuestion = new Map((responses ?? []).map((r) => [r.question_id, r.answer]));
 
-  const categories = [...new Set((tests ?? []).map((t) => t.category))];
-  const questionCategories = [...new Set((questions ?? []).map((q) => q.category))];
+  const categories = [...new Set(tests.map((t) => t.category))];
+  const questionCategories = [...new Set(questions.map((q) => q.category))];
+
+  // Radar score per category (0-5) is completion-based — % of that
+  // category's required tests/questions that have a recorded value — not a
+  // performance benchmark, since raw test units (sec, cm, reps) have no
+  // defined good/bad range yet. "Previous" per category only counts tests
+  // that have actually been rescored (previous_score set by the DB
+  // trigger); the Previous chart itself only renders once that's true
+  // somewhere, since a single assessment has nothing to compare against.
+  const currentScores: Record<string, number> = {};
+  const previousScores: Record<string, number> = {};
+  let hasPrevious = false;
+
+  for (const axis of FIVE_S_RADAR_AXES) {
+    const categoryTests = tests.filter((t) => t.category === axis.key && t.is_required);
+    if (categoryTests.length > 0) {
+      let currentCount = 0;
+      let previousCount = 0;
+      for (const test of categoryTests) {
+        const result = resultByTest.get(test.id);
+        if (result) currentCount++;
+        if (result?.previous_score != null) {
+          previousCount++;
+          hasPrevious = true;
+        }
+      }
+      currentScores[axis.key] = (currentCount / categoryTests.length) * 5;
+      previousScores[axis.key] = (previousCount / categoryTests.length) * 5;
+      continue;
+    }
+
+    const categoryQuestions = questions.filter((q) => q.category === axis.key);
+    if (categoryQuestions.length > 0) {
+      const answeredCount = categoryQuestions.filter((q) => responseByQuestion.has(q.id)).length;
+      currentScores[axis.key] = (answeredCount / categoryQuestions.length) * 5;
+      previousScores[axis.key] = 0;
+    }
+  }
 
   return (
     <div className="space-y-8">
+      <FiveSRadarSection current={currentScores} previous={previousScores} showPrevious={hasPrevious} />
+
       {categories.map((category) => {
-        const categoryTests = (tests ?? []).filter((t) => t.category === category);
+        const categoryTests = tests.filter((t) => t.category === category);
         const overallRemarks = noteByCategory.get(category);
 
         // Subsection groups within a category (e.g. Strength's Flexibility
@@ -147,7 +206,7 @@ export async function FiveSResultsView({ playerId }: { playerId: string }) {
       })}
 
       {questionCategories.map((category) => {
-        const categoryQuestions = (questions ?? []).filter((q) => q.category === category);
+        const categoryQuestions = questions.filter((q) => q.category === category);
 
         const sections: { label: string; questions: typeof categoryQuestions }[] = [];
         for (const question of categoryQuestions) {

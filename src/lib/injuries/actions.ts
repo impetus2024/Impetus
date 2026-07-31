@@ -4,7 +4,8 @@ import * as z from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { uploadFile } from "@/lib/storage/r2";
+import { uploadFile, UploadValidationError } from "@/lib/storage/r2";
+import { logError } from "@/lib/logger";
 
 const InjurySchema = z.object({
   dateOfInjury: z.string().min(1, { error: "Date is required." }),
@@ -55,9 +56,12 @@ export async function createInjury(
   const file = formData.get("reportDocument");
   if (file instanceof File && file.size > 0) {
     try {
-      reportDocPath = await uploadFile(file, `injury-reports/${playerId}`);
-    } catch {
-      // storage not configured — record still gets created without it
+      reportDocPath = await uploadFile(file, `injury-reports/${playerId}`, "private", reporter.id);
+    } catch (err) {
+      if (err instanceof UploadValidationError) {
+        return { error: err.message };
+      }
+      logError(`Report document upload failed for injury on player ${playerId}:`, err);
     }
   }
 
@@ -78,6 +82,7 @@ export async function createInjury(
   });
 
   if (error) {
+    logError(`Failed to save injury report for player ${playerId}:`, error);
     return { error: "Failed to save injury report." };
   }
 

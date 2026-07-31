@@ -2,7 +2,12 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { roleHome, type UserRole } from "@/lib/auth/roles";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+const PUBLIC_PATHS = ["/login", "/auth", "/forgot-password"];
+// Unlike PUBLIC_PATHS, never redirected in *either* direction (logged-in
+// users aren't bounced to their dashboard here either) — an uptime monitor
+// can't follow a redirect meaningfully, and it isn't a page a signed-in
+// user would land on by mistake.
+const ALWAYS_ALLOWED_PATHS = ["/api/health"];
 
 // Refreshes the Supabase session cookie on every request and applies
 // optimistic (cookie-only) redirects. Authoritative role checks still
@@ -31,9 +36,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  const pathname = request.nextUrl.pathname;
+  if (ALWAYS_ALLOWED_PATHS.some((p) => pathname.startsWith(p))) {
+    return response;
+  }
+
   const { data } = await supabase.auth.getClaims();
   const claims = data?.claims;
-  const pathname = request.nextUrl.pathname;
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   if (!claims && !isPublicPath) {

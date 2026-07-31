@@ -7,6 +7,26 @@ function getClient() {
   return new Resend(apiKey);
 }
 
+// The Resend SDK doesn't expose a per-call timeout — without this, a
+// hanging request to their API would hang the Server Action awaiting it
+// (provisionUser/resetUserPassword already treat a failed send as
+// non-fatal and log a warning, but only once this actually rejects).
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Email send timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 // Sent whenever the service-role admin API creates an account for someone
 // else (Centre Admin, Coach, Medical, Parent) — carries their temp password.
 export async function sendAccountInviteEmail(params: {
@@ -20,16 +40,19 @@ export async function sendAccountInviteEmail(params: {
 
   const { to, fullName, tempPassword, loginUrl } = params;
 
-  await getClient().emails.send({
-    from,
-    to,
-    subject: "Your account has been created",
-    html: `
+  await withTimeout(
+    getClient().emails.send({
+      from,
+      to,
+      subject: "Your account has been created",
+      html: `
       <p>Hi ${fullName},</p>
       <p>An account has been created for you. Sign in and change your password as soon as possible.</p>
       <p><strong>Email:</strong> ${to}<br/>
       <strong>Temporary password:</strong> ${tempPassword}</p>
       <p><a href="${loginUrl}">Sign in</a></p>
     `,
-  });
+    }),
+    10000
+  );
 }

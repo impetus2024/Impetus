@@ -7,13 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:super-admin": "node --env-file=.env.local -r tsx/cjs scripts/seed-super-admin.ts"
+    "seed:super-admin": "node --env-file=.env.local -r tsx/cjs scripts/seed-super-admin.ts",
+    "seed:test-accounts": "node --env-file=.env.local -r tsx/cjs scripts/seed-test-accounts.ts",
+    "seed:mock-data": "node --env-file=.env.local -r tsx/cjs scripts/seed-mock-data.ts",
+    "test:e2e": "playwright test",
+    "db:dump-schema": "supabase db dump --local --schema public -f schema.sql",
+    "db:push": "node -r tsx/cjs scripts/lib/supabase-guard.ts db push",
+    "db:reset:linked": "node -r tsx/cjs scripts/lib/supabase-guard.ts db reset --linked",
+    "supabase:link": "node -r tsx/cjs scripts/lib/supabase-guard.ts link"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",
     "@aws-sdk/s3-request-presigner": "^3.1095.0",
     "@base-ui/react": "^1.6.0",
     "@hookform/resolvers": "^5.5.7",
+    "@sentry/nextjs": "^10.69.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "class-variance-authority": "^0.7.1",
@@ -35,6 +43,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

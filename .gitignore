@@ -37,6 +37,13 @@ yarn-error.log*
 # vercel
 .vercel
 
+# raw DB dump/export artifacts — local reference only, never committed
+# (schema.sql is the exception: kept as a living reference, see package.json)
+/data.sql
+/production.sql
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Added by code-review-graph
+.code-review-graph/
