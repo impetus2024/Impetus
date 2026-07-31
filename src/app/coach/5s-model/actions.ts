@@ -4,6 +4,28 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { isFiveSWindowOpen } from "@/lib/five-s/testing-window";
+import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
+import { logError } from "@/lib/logger";
+
+// Shared by every score/response-submitting action below — score entry
+// (not publishing) only happens while the centre admin's 5S testing
+// window is open. Re-checked here server-side since the disabled state of
+// the "Update Score" button is just a UI courtesy.
+async function assertTestingWindowOpen(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  centreId: string
+): Promise<string | null> {
+  const { data: centre } = await supabase
+    .from("centres")
+    .select("five_s_window_start, five_s_window_end")
+    .eq("id", centreId)
+    .single();
+  if (!isFiveSWindowOpen(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null)) {
+    return "The 5S testing window is closed. Contact your centre admin.";
+  }
+  return null;
+}
 
 export type SpeedScoresFormState = { error?: string } | undefined;
 
@@ -28,6 +50,11 @@ export async function submitSpeedScores(
 
   if (!batch) {
     return { error: "You don't have access to this batch." };
+  }
+
+  const windowError = await assertTestingWindowOpen(supabase, batch.centre_id);
+  if (windowError) {
+    return { error: windowError };
   }
 
   const rows: {
@@ -63,6 +90,7 @@ export async function submitSpeedScores(
     .upsert(rows, { onConflict: "player_id,test_id" });
 
   if (error) {
+    logError(`Failed to save speed scores for player ${playerId}:`, error);
     return { error: "Failed to save scores." };
   }
 
@@ -92,6 +120,11 @@ export async function submitStrengthScores(
     return { error: "You don't have access to this batch." };
   }
 
+  const windowError = await assertTestingWindowOpen(supabase, batch.centre_id);
+  if (windowError) {
+    return { error: windowError };
+  }
+
   const rows: {
     player_id: string;
     test_id: string;
@@ -125,6 +158,7 @@ export async function submitStrengthScores(
     .upsert(rows, { onConflict: "player_id,test_id" });
 
   if (error) {
+    logError(`Failed to save strength scores for player ${playerId}:`, error);
     return { error: "Failed to save scores." };
   }
 
@@ -153,6 +187,11 @@ export async function submitStaminaScores(
 
   if (!batch) {
     return { error: "You don't have access to this batch." };
+  }
+
+  const windowError = await assertTestingWindowOpen(supabase, batch.centre_id);
+  if (windowError) {
+    return { error: windowError };
   }
 
   const rows: {
@@ -201,6 +240,7 @@ export async function submitStaminaScores(
     .upsert(rows, { onConflict: "player_id,test_id" });
 
   if (resultsError) {
+    logError(`Failed to save stamina scores for player ${playerId}:`, resultsError);
     return { error: "Failed to save scores." };
   }
 
@@ -216,6 +256,7 @@ export async function submitStaminaScores(
   );
 
   if (notesError) {
+    logError(`Failed to save stamina overall remarks for player ${playerId}:`, notesError);
     return { error: "Failed to save overall remarks." };
   }
 
@@ -249,6 +290,11 @@ export async function submitSpiritResponses(
     return { error: "You don't have access to this batch." };
   }
 
+  const windowError = await assertTestingWindowOpen(supabase, batch.centre_id);
+  if (windowError) {
+    return { error: windowError };
+  }
+
   const rows: {
     player_id: string;
     question_id: string;
@@ -276,6 +322,7 @@ export async function submitSpiritResponses(
     .upsert(rows, { onConflict: "player_id,question_id" });
 
   if (error) {
+    logError(`Failed to save spirit responses for player ${playerId}:`, error);
     return { error: "Failed to save responses." };
   }
 
@@ -305,6 +352,11 @@ export async function submitSkillScores(
 
   if (!batch) {
     return { error: "You don't have access to this batch." };
+  }
+
+  const windowError = await assertTestingWindowOpen(supabase, batch.centre_id);
+  if (windowError) {
+    return { error: windowError };
   }
 
   const resultRows: {
@@ -376,6 +428,7 @@ export async function submitSkillScores(
       .upsert(resultRows, { onConflict: "player_id,test_id" });
 
     if (resultsError) {
+      logError(`Failed to save skill ratings for player ${playerId}:`, resultsError);
       return { error: "Failed to save ratings." };
     }
   }
@@ -385,6 +438,7 @@ export async function submitSkillScores(
     .upsert(groupNoteRows, { onConflict: "player_id,category,group_name" });
 
   if (groupNotesError) {
+    logError(`Failed to save skill group remarks for player ${playerId}:`, groupNotesError);
     return { error: "Failed to save test group remarks." };
   }
 
@@ -400,9 +454,83 @@ export async function submitSkillScores(
   );
 
   if (notesError) {
+    logError(`Failed to save skill overall remarks for player ${playerId}:`, notesError);
     return { error: "Failed to save overall remarks." };
   }
 
   revalidatePath(`/coach/5s-model/${batchId}/${playerId}`);
   redirect(`/coach/5s-model/${batchId}/${playerId}`);
+}
+
+export type PublishReportState = { error?: string } | { success: true };
+
+// Publishing is the choke point that makes a player's 5S results visible
+// to centre_admin/parent (see the RLS policies added alongside
+// five_s_reports) — re-checks completeness server-side rather than
+// trusting the disabled state of the button that triggered this.
+export async function publishFiveSReport(
+  batchId: string,
+  playerId: string
+): Promise<PublishReportState> {
+  const coach = await requireRole("coach");
+  const supabase = await createClient();
+
+  const { data: batch } = await supabase
+    .from("batches")
+    .select("id, centre_id")
+    .eq("id", batchId)
+    .eq("head_coach_id", coach.id)
+    .maybeSingle();
+
+  if (!batch) {
+    return { error: "You don't have access to this batch." };
+  }
+
+  const { data: player } = await supabase
+    .from("players")
+    .select("id")
+    .eq("id", playerId)
+    .eq("batch_id", batchId)
+    .maybeSingle();
+
+  if (!player) {
+    return { error: "Player not found in this batch." };
+  }
+
+  const [tests, questions, { count: resultCount }, { count: responseCount }] = await Promise.all([
+    getFiveSTests(),
+    getFiveSQuestions(),
+    supabase
+      .from("five_s_results")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", playerId),
+    supabase
+      .from("five_s_question_responses")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", playerId),
+  ]);
+
+  const isComplete = (resultCount ?? 0) >= tests.length && (responseCount ?? 0) >= questions.length;
+  if (!isComplete) {
+    return { error: "Every test and question must be answered before publishing." };
+  }
+
+  const { error } = await supabase.from("five_s_reports").upsert(
+    {
+      player_id: playerId,
+      centre_id: batch.centre_id,
+      published_by: coach.id,
+      published_at: new Date().toISOString(),
+    },
+    { onConflict: "player_id" }
+  );
+
+  if (error) {
+    logError(`Failed to publish 5S report for player ${playerId}:`, error);
+    return { error: "Failed to publish report." };
+  }
+
+  revalidatePath(`/coach/5s-model/${batchId}/${playerId}`);
+  revalidatePath(`/coach/5s-model/${batchId}/${playerId}/results`);
+  return { success: true };
 }

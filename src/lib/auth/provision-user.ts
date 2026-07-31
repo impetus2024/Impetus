@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAccountInviteEmail } from "@/lib/email/send";
+import { logError, logWarning } from "@/lib/logger";
 import type { UserRole } from "@/lib/auth/roles";
 
 function generateTempPassword(): string {
@@ -52,8 +53,56 @@ export async function provisionUser(params: {
   try {
     await sendAccountInviteEmail({ to: email, fullName, tempPassword, loginUrl });
   } catch (err) {
-    console.warn(`Invite email not sent for ${email}:`, err);
+    logWarning(`Invite email not sent for ${email}:`, err);
   }
 
   return data.user;
+}
+
+// Recovery path for accounts that can't use self-service "forgot password"
+// (no working inbox, invite email never arrived because Resend isn't
+// configured). Always returns the new password to the caller — shown
+// once in the admin UI — precisely because email delivery can't be
+// trusted to have worked; a centre admin can then relay it out of band.
+export async function resetUserPassword(params: {
+  userId: string;
+  email: string;
+  fullName: string;
+  loginUrl: string;
+}): Promise<{ tempPassword: string; emailSent: boolean }> {
+  const { userId, email, fullName, loginUrl } = params;
+  const tempPassword = generateTempPassword();
+  const admin = createAdminClient();
+
+  const { error } = await admin.auth.admin.updateUserById(userId, {
+    password: tempPassword,
+  });
+  if (error) throw error;
+
+  // Penetration test finding: changing the password alone left any
+  // already-issued session usable — confirmed live, an old access token
+  // kept working after this exact call. supabase-js's admin API has no
+  // "revoke every session for user X" method (signOut() needs that
+  // session's own JWT, which we don't have here), so this goes through a
+  // security-definer function instead (see its migration for the full
+  // caveat: this stops the session being refreshed, but per JWT
+  // statelessness an already-issued access token is only fully dead once
+  // it naturally expires). Logged, not thrown — the password change
+  // already succeeded and matters more than this secondary hardening step.
+  const { error: revokeError } = await admin.rpc("revoke_user_sessions", {
+    target_user_id: userId,
+  });
+  if (revokeError) {
+    logError(`Failed to revoke existing sessions for ${email} after password reset:`, revokeError);
+  }
+
+  let emailSent = false;
+  try {
+    await sendAccountInviteEmail({ to: email, fullName, tempPassword, loginUrl });
+    emailSent = true;
+  } catch (err) {
+    logWarning(`Password reset email not sent for ${email}:`, err);
+  }
+
+  return { tempPassword, emailSent };
 }

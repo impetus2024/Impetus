@@ -4,6 +4,8 @@ import * as z from "zod";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { roleHome, type UserRole } from "@/lib/auth/dal";
+import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
+import { safeNextPath } from "@/lib/url";
 
 const LoginSchema = z.object({
   email: z.email({ error: "Enter a valid email." }),
@@ -25,12 +27,22 @@ export async function login(
     return { error: "Enter a valid email and password." };
   }
 
+  const rateLimitKey = `login:${parsed.data.email.trim().toLowerCase()}`;
+  const rateLimit = isRateLimited(rateLimitKey);
+  if (rateLimit.limited) {
+    return {
+      error: `Too many failed attempts. Try again in ${rateLimit.retryAfterMinutes} minute${rateLimit.retryAfterMinutes === 1 ? "" : "s"}.`,
+    };
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error || !data.user) {
+    recordAttempt(rateLimitKey);
     return { error: "Invalid email or password." };
   }
+  clearAttempts(rateLimitKey);
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -43,5 +55,6 @@ export async function login(
     return { error: "This account is disabled. Contact your centre admin." };
   }
 
-  redirect(roleHome(profile.role as UserRole));
+  const next = safeNextPath(formData.get("next"));
+  redirect(next ?? roleHome(profile.role as UserRole));
 }

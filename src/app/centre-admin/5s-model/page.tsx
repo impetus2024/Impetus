@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
+import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
+import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
 import {
   Table,
   TableBody,
@@ -14,34 +18,43 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TestingWindowDialog } from "./testing-window-dialog";
 
 export default async function CentreAdmin5sModelPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; batchId?: string }>;
+  searchParams: Promise<{ q?: string; batchId?: string; page?: string }>;
 }) {
   const centreAdmin = await requireRole("centre_admin");
-  const { q, batchId } = await searchParams;
+  const { q, batchId, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
   let query = supabase
     .from("players")
-    .select("id, name, batches(name)")
+    .select("id, name, batches(name)", { count: "exact" })
     .eq("centre_id", centreAdmin.centre_id!)
     .eq("is_active", true);
 
   if (q) query = query.ilike("name", `%${q}%`);
   if (batchId) query = query.eq("batch_id", batchId);
 
-  const [{ data: players }, { data: batches }] = await Promise.all([
-    query.order("name"),
+  const [{ data: players, count }, { data: batches }, { data: centre }] = await Promise.all([
+    query.order("name").range(from, to),
     supabase
       .from("batches")
       .select("id, name")
       .eq("centre_id", centreAdmin.centre_id!)
       .order("name"),
+    supabase
+      .from("centres")
+      .select("five_s_window_start, five_s_window_end")
+      .eq("id", centreAdmin.centre_id!)
+      .single(),
   ]);
 
+  const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
   const hasFilters = Boolean(q || batchId);
 
   return (
@@ -52,6 +65,17 @@ export default async function CentreAdmin5sModelPage({
           View-only — Speed, Stamina, Strength, Spirit, and Skill test results are entered by each player&apos;s coach.
         </p>
       </div>
+
+      <TestingWindowBanner
+        status={windowStatus}
+        action={
+          <TestingWindowDialog
+            currentStart={centre?.five_s_window_start ?? null}
+            currentEnd={centre?.five_s_window_end ?? null}
+            triggerLabel={windowStatus.status === "none" ? "Set Testing Window" : "Edit Testing Window"}
+          />
+        }
+      />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <ListSearch placeholder="Search players..." />
@@ -75,7 +99,7 @@ export default async function CentreAdmin5sModelPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  render={<Link href={`/centre-admin/players/${p.id}?section=5s`}>View Results</Link>}
+                  render={<Link href={`/centre-admin/5s-model/${p.id}`}>View Results</Link>}
                 />
               </TableCell>
             </TableRow>
@@ -93,6 +117,8 @@ export default async function CentreAdmin5sModelPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }

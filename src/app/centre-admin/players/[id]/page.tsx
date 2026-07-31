@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
-import { getSignedFileUrl } from "@/lib/storage/r2";
+import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { InjuryReportsTable } from "@/components/injuries/injury-reports-table";
@@ -99,16 +100,7 @@ export default async function PlayerDetailPage({
     medicalRecords: player.medical_records_path,
     profilePicture: player.profile_picture_path,
   };
-  const documentLinks: Record<string, string> = {};
-  for (const [label, key] of Object.entries(docKeys)) {
-    if (key) {
-      try {
-        documentLinks[label] = await getSignedFileUrl(key);
-      } catch {
-        // storage not configured — link omitted
-      }
-    }
-  }
+  const documentLinks = await resolveDocumentLinks(docKeys);
 
   return (
     <div className="space-y-6">
@@ -213,7 +205,19 @@ export default async function PlayerDetailPage({
               </div>
             )}
 
-            {section === "5s" && <FiveSResultsView playerId={id} />}
+            {section === "5s" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-end">
+                  <Link
+                    href={`/centre-admin/5s-model/${id}`}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Open full results page
+                  </Link>
+                </div>
+                <FiveSResultsView playerId={id} gateUntilPublished />
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

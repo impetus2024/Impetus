@@ -195,6 +195,8 @@ export type Database = {
           country: string
           created_at: string
           email: string
+          five_s_window_end: string | null
+          five_s_window_start: string | null
           id: string
           is_active: boolean
           logo_path: string | null
@@ -206,6 +208,8 @@ export type Database = {
           country: string
           created_at?: string
           email: string
+          five_s_window_end?: string | null
+          five_s_window_start?: string | null
           id?: string
           is_active?: boolean
           logo_path?: string | null
@@ -217,6 +221,8 @@ export type Database = {
           country?: string
           created_at?: string
           email?: string
+          five_s_window_end?: string | null
+          five_s_window_start?: string | null
           id?: string
           is_active?: boolean
           logo_path?: string | null
@@ -427,11 +433,59 @@ export type Database = {
         }
         Relationships: []
       }
+      five_s_reports: {
+        Row: {
+          centre_id: string
+          id: string
+          player_id: string
+          published_at: string
+          published_by: string
+        }
+        Insert: {
+          centre_id: string
+          id?: string
+          player_id: string
+          published_at?: string
+          published_by: string
+        }
+        Update: {
+          centre_id?: string
+          id?: string
+          player_id?: string
+          published_at?: string
+          published_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_reports_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_reports_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: true
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_reports_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       five_s_results: {
         Row: {
           centre_id: string
           id: string
           player_id: string
+          previous_recorded_at: string | null
+          previous_score: number | null
           recorded_at: string
           recorded_by: string
           remarks: string | null
@@ -444,6 +498,8 @@ export type Database = {
           centre_id: string
           id?: string
           player_id: string
+          previous_recorded_at?: string | null
+          previous_score?: number | null
           recorded_at?: string
           recorded_by: string
           remarks?: string | null
@@ -456,6 +512,8 @@ export type Database = {
           centre_id?: string
           id?: string
           player_id?: string
+          previous_recorded_at?: string | null
+          previous_score?: number | null
           recorded_at?: string
           recorded_by?: string
           remarks?: string | null
@@ -1118,7 +1176,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      revoke_user_sessions: {
+        Args: { target_user_id: string }
+        Returns: undefined
+      }
+      toggle_gate_pass: {
+        Args: {
+          p_centre_id: string
+          p_performed_by: string
+          p_player_id: string
+          p_reason: string
+        }
+        Returns: {
+          action: Database["public"]["Enums"]["gate_pass_action"]
+          centre_id: string
+          created_at: string
+          id: string
+          performed_by: string
+          player_id: string
+          reason: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "gate_pass_logs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       attendance_status: "present" | "absent"

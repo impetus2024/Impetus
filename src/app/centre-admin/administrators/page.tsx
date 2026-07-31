@@ -4,6 +4,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -15,6 +17,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { AddAdministratorDialog } from "./add-administrator-dialog";
 import { AdministratorRowActions } from "./row-actions";
+
+// PostgREST parses .or()'s argument as filter *grammar*, not a plain
+// value — unlike .eq()/.ilike(), which safely parameterize their value —
+// so unescaped user input reaches the filter parser directly. Confirmed
+// during a penetration test: a comma in the search box reaches PostgREST's
+// logic-tree parser and can corrupt/extend the intended filter (bounded
+// here by the centre_id/role filters and RLS, but still a real injection
+// point, and it silently breaks legitimate searches containing a comma,
+// e.g. "Smith, John"). PostgREST's reserved filter-value characters are
+// `,` `.` `:` `(` `)` — escape them with a backslash before interpolating.
+function escapeOrFilterValue(value: string): string {
+  return value.replace(/[,.:()]/g, (c) => `\\${c}`);
+}
 
 const ROLE_LABEL: Record<string, string> = {
   centre_admin: "Centre Admin",
@@ -31,24 +46,29 @@ const ROLE_OPTIONS = [
 export default async function AdministratorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; role?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; role?: string; status?: string; page?: string }>;
 }) {
   const centreAdmin = await requireRole("centre_admin");
-  const { q, role, status } = await searchParams;
+  const { q, role, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
   let query = supabase
     .from("profiles")
-    .select("id, full_name, email, role, is_active")
+    .select("id, full_name, email, role, is_active", { count: "exact" })
     .eq("centre_id", centreAdmin.centre_id!)
     .in("role", ["centre_admin", "coach", "medical"]);
 
-  if (q) query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
+  if (q) {
+    const safeQ = escapeOrFilterValue(q);
+    query = query.or(`full_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`);
+  }
   if (role) query = query.eq("role", role as "centre_admin" | "coach" | "medical");
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
 
-  const { data: administrators } = await query.order("full_name");
+  const { data: administrators, count } = await query.order("full_name").range(from, to);
   const hasFilters = Boolean(q || role || status);
 
   return (
@@ -113,6 +133,8 @@ export default async function AdministratorsPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }

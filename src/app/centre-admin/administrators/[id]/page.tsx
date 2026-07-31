@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
-import { getSignedFileUrl } from "@/lib/storage/r2";
+import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
 import { AdministratorDetailForm } from "./administrator-detail-form";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -41,16 +41,7 @@ export default async function AdministratorDetailPage({
     otherDocuments: staffProfile?.other_documents_path,
   };
 
-  const documentUrls: Record<string, string> = {};
-  for (const [label, key] of Object.entries(docKeys)) {
-    if (key) {
-      try {
-        documentUrls[label] = await getSignedFileUrl(key);
-      } catch {
-        // storage not configured — link simply won't be shown
-      }
-    }
-  }
+  const documentUrls = await resolveDocumentLinks(docKeys);
 
   return (
     <div className="max-w-2xl space-y-6">

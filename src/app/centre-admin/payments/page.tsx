@@ -4,6 +4,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -17,22 +19,24 @@ import { AddPaymentDialog } from "./add-payment-dialog";
 export default async function PaymentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; packageId?: string }>;
+  searchParams: Promise<{ q?: string; packageId?: string; page?: string }>;
 }) {
   const centreAdmin = await requireRole("centre_admin");
-  const { q, packageId } = await searchParams;
+  const { q, packageId, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
   let query = supabase
     .from("payments")
-    .select("id, amount, payment_date, notes, players!inner(name), packages(name)")
+    .select("id, amount, payment_date, notes, players!inner(name), packages(name)", { count: "exact" })
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (q) query = query.ilike("players.name", `%${q}%`);
   if (packageId) query = query.eq("package_id", packageId);
 
-  const [{ data: payments }, { data: players }, { data: packages }] = await Promise.all([
-    query.order("payment_date", { ascending: false }),
+  const [{ data: payments, count }, { data: players }, { data: packages }] = await Promise.all([
+    query.order("payment_date", { ascending: false }).range(from, to),
     supabase
       .from("players")
       .select("id, name")
@@ -94,6 +98,8 @@ export default async function PaymentsPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }

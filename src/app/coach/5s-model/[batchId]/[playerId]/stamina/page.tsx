@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
+import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
+import { getFiveSTests } from "@/lib/five-s/catalog";
 import { StaminaScoreForm } from "./stamina-score-form";
 
 export default async function Coach5sModelStaminaPage({
@@ -18,7 +21,7 @@ export default async function Coach5sModelStaminaPage({
 
   const { data: batch } = await supabase
     .from("batches")
-    .select("id, name")
+    .select("id, name, centre_id")
     .eq("id", batchId)
     .eq("head_coach_id", coach.id)
     .maybeSingle();
@@ -34,12 +37,15 @@ export default async function Coach5sModelStaminaPage({
 
   if (!player) notFound();
 
-  const [{ data: tests }, { data: results }, { data: note }] = await Promise.all([
-    supabase
-      .from("five_s_tests")
-      .select("id, name, unit")
-      .eq("category", "stamina")
-      .order("display_order"),
+  const { data: centre } = await supabase
+    .from("centres")
+    .select("five_s_window_start, five_s_window_end")
+    .eq("id", batch.centre_id)
+    .single();
+  const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
+
+  const [allTests, { data: results }, { data: note }] = await Promise.all([
+    getFiveSTests(),
     supabase
       .from("five_s_results")
       .select("test_id, score, vo2_max, remarks")
@@ -51,6 +57,7 @@ export default async function Coach5sModelStaminaPage({
       .eq("category", "stamina")
       .maybeSingle(),
   ]);
+  const tests = allTests.filter((t) => t.category === "stamina");
 
   const existingByTest = new Map((results ?? []).map((r) => [r.test_id, r]));
 
@@ -72,17 +79,21 @@ export default async function Coach5sModelStaminaPage({
         </div>
       </div>
 
-      <Card className="rounded-2xl border-border/50 py-6 shadow-soft">
-        <CardContent className="px-6">
-          <StaminaScoreForm
-            batchId={batchId}
-            playerId={playerId}
-            tests={tests ?? []}
-            existingByTest={existingByTest}
-            overallRemarks={note?.remarks ?? ""}
-          />
-        </CardContent>
-      </Card>
+      {windowStatus.status === "open" ? (
+        <Card className="rounded-2xl border-border/50 py-6 shadow-soft">
+          <CardContent className="px-6">
+            <StaminaScoreForm
+              batchId={batchId}
+              playerId={playerId}
+              tests={tests}
+              existingByTest={existingByTest}
+              overallRemarks={note?.remarks ?? ""}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <TestingWindowBanner status={windowStatus} />
+      )}
     </div>
   );
 }

@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadFile } from "@/lib/storage/r2";
-import { provisionUser } from "@/lib/auth/provision-user";
+import { uploadDocFields } from "@/lib/storage/upload-doc-fields";
+import { provisionUser, resetUserPassword } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
+import { logError } from "@/lib/logger";
 import type { Database } from "@/lib/supabase/database.types";
 
 type StaffProfileInsert = Database["public"]["Tables"]["staff_profiles"]["Insert"];
@@ -70,11 +71,13 @@ export async function createAdministrator(
       loginUrl: absoluteUrl("/login"),
     });
     userId = user.id;
-  } catch {
-    return {
-      error:
-        "Failed to create the account. Check that email is configured (RESEND_API_KEY / EMAIL_FROM).",
-    };
+  } catch (err) {
+    // provisionUser already tolerates email-delivery failures internally
+    // (see its own catch around sendAccountInviteEmail) — reaching here
+    // means the auth account itself failed to create, most commonly a
+    // duplicate email.
+    logError(`Failed to provision administrator account for ${parsed.data.email}:`, err);
+    return { error: "Failed to create the account — that email may already be in use." };
   }
 
   // profiles row for the new user only exists once the auth trigger runs
@@ -102,26 +105,22 @@ export async function createAdministrator(
     { formKey: "otherDocuments", column: "other_documents_path" },
   ];
 
-  for (const { formKey, column } of docFields) {
-    const file = formData.get(formKey);
-    if (file instanceof File && file.size > 0) {
-      try {
-        staffProfile[column] = await uploadFile(
-          file,
-          `staff-documents/${userId}`
-        );
-      } catch {
-        // Storage not configured yet — account still gets created without
-        // this document; it can be attached later once R2 is wired up.
-      }
-    }
+  // The auth account already exists by this point (provisionUser above),
+  // so a rejected/failed document here can't abort the whole action the
+  // way it does in createPlayer — just skip it and log, the account still
+  // needs to be usable. It can be attached later from the detail page.
+  const uploads = await uploadDocFields(formData, docFields, `staff-documents/${userId}`, centreAdmin.id);
+  if (uploads.error) {
+    logError(`Document rejected while creating administrator ${userId}:`, uploads.error);
   }
+  Object.assign(staffProfile, uploads.values);
 
   const { error: staffError } = await admin
     .from("staff_profiles")
     .insert(staffProfile);
 
   if (staffError) {
+    logError(`Failed to save staff_profiles for new administrator ${userId}:`, staffError);
     return { error: "Account created, but saving staff details failed." };
   }
 
@@ -205,6 +204,7 @@ export async function updateAdministrator(
     .eq("profile_id", profileId);
 
   if (error) {
+    logError(`Failed to save staff_profiles for administrator ${profileId}:`, error);
     return { error: "Failed to save changes." };
   }
 
@@ -217,11 +217,55 @@ export async function setAdministratorActive(profileId: string, active: boolean)
   const centreAdmin = await requireRole("centre_admin");
   const supabase = await createClient();
 
-  await supabase
+  const { error } = await supabase
     .from("profiles")
     .update({ is_active: active })
     .eq("id", profileId)
     .eq("centre_id", centreAdmin.centre_id!);
 
+  if (error) {
+    logError(`Failed to ${active ? "enable" : "disable"} administrator ${profileId}:`, error);
+    throw error;
+  }
+
   revalidatePath("/centre-admin/administrators");
+}
+
+export type ResetPasswordActionState =
+  | { error: string }
+  | { tempPassword: string; emailSent: boolean };
+
+// Recovery path for staff who can't self-service "forgot password" (no
+// working inbox, or the original invite email never arrived because
+// Resend isn't configured) — see resetUserPassword's doc comment.
+export async function resetAdministratorPassword(
+  profileId: string
+): Promise<ResetPasswordActionState> {
+  const centreAdmin = await requireRole("centre_admin");
+  const supabase = await createClient();
+
+  const { data: staff } = await supabase
+    .from("profiles")
+    .select("id, email, full_name")
+    .eq("id", profileId)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .in("role", ["centre_admin", "coach", "medical"])
+    .maybeSingle();
+
+  if (!staff) {
+    return { error: "Administrator not found." };
+  }
+
+  try {
+    const result = await resetUserPassword({
+      userId: staff.id,
+      email: staff.email,
+      fullName: staff.full_name,
+      loginUrl: absoluteUrl("/login"),
+    });
+    return result;
+  } catch (err) {
+    logError(`Failed to reset password for ${staff.email}:`, err);
+    return { error: "Failed to reset password." };
+  }
 }

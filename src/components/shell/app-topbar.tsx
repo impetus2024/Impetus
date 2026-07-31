@@ -206,7 +206,12 @@ export function AppTopbar({
       <DropdownMenu>
         <DropdownMenuTrigger
           nativeButton
-          render={<button className="ml-1 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring" />}
+          render={
+            <button
+              aria-label="Account menu"
+              className="ml-1 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          }
         >
           <Avatar>
             <AvatarFallback className="bg-primary/10 font-medium text-primary">

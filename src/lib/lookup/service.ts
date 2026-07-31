@@ -2,6 +2,7 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/logger";
 
 // player_types and age_categories are structurally identical: a per-centre
 // name + is_active flag. Shared here so the two concrete Server Action
@@ -28,6 +29,7 @@ export async function createLookupItem(
     .insert({ centre_id: centreAdmin.centre_id!, name: trimmed });
 
   if (error) {
+    if (!isUniqueViolation(error)) logError(`Failed to create ${table} "${trimmed}":`, error);
     return {
       error: isUniqueViolation(error)
         ? "That name already exists."
@@ -57,6 +59,7 @@ export async function renameLookupItem(
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (error) {
+    if (!isUniqueViolation(error)) logError(`Failed to rename ${table} ${id}:`, error);
     return {
       error: isUniqueViolation(error)
         ? "That name already exists."
@@ -77,11 +80,16 @@ export async function setLookupItemActive(
   const centreAdmin = await requireRole("centre_admin");
   const supabase = await createClient();
 
-  await supabase
+  const { error } = await supabase
     .from(table)
     .update({ is_active: active })
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!);
+
+  if (error) {
+    logError(`Failed to ${active ? "activate" : "deactivate"} ${table} ${id}:`, error);
+    throw new Error("Failed to save.");
+  }
 
   revalidatePath(path);
 }

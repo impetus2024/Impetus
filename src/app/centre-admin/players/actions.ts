@@ -6,10 +6,11 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadFile } from "@/lib/storage/r2";
+import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
 import { provisionUser } from "@/lib/auth/provision-user";
 import { encryptField } from "@/lib/crypto/field-encryption";
 import { absoluteUrl } from "@/lib/url";
+import { logError } from "@/lib/logger";
 import type { Database } from "@/lib/supabase/database.types";
 
 type PlayerInsert = Database["public"]["Tables"]["players"]["Insert"];
@@ -170,19 +171,11 @@ export async function createPlayer(
     { formKey: "profilePicture", column: "profile_picture_path" },
   ];
 
-  for (const { formKey, column } of docFields) {
-    const file = formData.get(formKey);
-    if (file instanceof File && file.size > 0) {
-      try {
-        insert[column] = await uploadFile(
-          file,
-          `player-documents/${crypto.randomUUID()}`
-        );
-      } catch {
-        // storage not configured — record still gets created without it
-      }
-    }
+  const uploads = await uploadDocFields(formData, docFields, `player-documents/${crypto.randomUUID()}`, centreAdmin.id);
+  if (uploads.error) {
+    return { error: uploads.error };
   }
+  Object.assign(insert, uploads.values);
 
   const supabase = await createClient();
   const { data: player, error } = await supabase
@@ -192,6 +185,7 @@ export async function createPlayer(
     .single();
 
   if (error || !player) {
+    logError(`Failed to create player for centre ${centreAdmin.centre_id}:`, error);
     return { error: "Failed to create player." };
   }
 
@@ -207,10 +201,11 @@ export async function createPlayer(
       player_id: player.id,
       centre_id: centreAdmin.centre_id!,
     });
-  } catch {
+  } catch (err) {
     // Parent account/link failed (e.g. email not configured yet) — the
     // player record itself is saved; the link can be retried by editing
     // the player, or by adding the parent account manually.
+    logError(`Failed to link parent for player ${player.id} (${d.parentEmail}):`, err);
   }
 
   revalidatePath(PATH);
@@ -272,18 +267,20 @@ export async function updatePlayer(
     { formKey: "profilePicture", column: "profile_picture_path" },
   ];
 
-  for (const { formKey, column } of docFields) {
-    const file = formData.get(formKey);
-    if (file instanceof File && file.size > 0) {
-      try {
-        update[column] = await uploadFile(file, `player-documents/${id}`);
-      } catch {
-        // storage not configured — leave existing document as-is
-      }
-    }
-  }
-
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("players")
+    .select("aadhaar_doc_path, medical_records_path, profile_picture_path")
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .maybeSingle();
+
+  const uploads = await uploadDocFields(formData, docFields, `player-documents/${id}`, centreAdmin.id);
+  if (uploads.error) {
+    return { error: uploads.error };
+  }
+  Object.assign(update, uploads.values);
+
   const { error } = await supabase
     .from("players")
     .update(update)
@@ -291,8 +288,11 @@ export async function updatePlayer(
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (error) {
+    logError(`Failed to save player ${id}:`, error);
     return { error: "Failed to save player." };
   }
+
+  if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 
   revalidatePath(PATH);
   revalidatePath(`/centre-admin/players/${id}`);
@@ -385,18 +385,20 @@ export async function updatePlayerProfile(
     { formKey: "profilePicture", column: "profile_picture_path" },
   ];
 
-  for (const { formKey, column } of docFields) {
-    const file = formData.get(formKey);
-    if (file instanceof File && file.size > 0) {
-      try {
-        update[column] = await uploadFile(file, `player-documents/${id}`);
-      } catch {
-        // storage not configured — leave existing document as-is
-      }
-    }
-  }
-
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("players")
+    .select("aadhaar_doc_path, medical_records_path, profile_picture_path")
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .maybeSingle();
+
+  const uploads = await uploadDocFields(formData, docFields, `player-documents/${id}`, centreAdmin.id);
+  if (uploads.error) {
+    return { error: uploads.error };
+  }
+  Object.assign(update, uploads.values);
+
   const { error } = await supabase
     .from("players")
     .update(update)
@@ -404,8 +406,11 @@ export async function updatePlayerProfile(
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (error) {
+    logError(`Failed to save player profile ${id}:`, error);
     return { error: "Failed to save player profile." };
   }
+
+  if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 
   revalidatePath(PATH);
   revalidatePath(`/centre-admin/players/${id}`);
@@ -467,6 +472,7 @@ export async function updateParentProfile(
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (error) {
+    logError(`Failed to save parent profile for player ${id}:`, error);
     return { error: "Failed to save parent profile." };
   }
 
@@ -479,11 +485,16 @@ export async function setPlayerActive(id: string, active: boolean) {
   const centreAdmin = await requireRole("centre_admin");
   const supabase = await createClient();
 
-  await supabase
+  const { error } = await supabase
     .from("players")
     .update({ is_active: active })
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!);
+
+  if (error) {
+    logError(`Failed to ${active ? "activate" : "deactivate"} player ${id}:`, error);
+    throw new Error("Failed to save.");
+  }
 
   revalidatePath(PATH);
   revalidatePath(`/centre-admin/players/${id}`);

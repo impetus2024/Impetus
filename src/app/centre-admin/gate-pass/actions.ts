@@ -4,6 +4,7 @@ import * as z from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/logger";
 
 const PATH = "/centre-admin/gate-pass";
 
@@ -33,7 +34,7 @@ export async function createGatePassEntry(
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, is_checked_in")
+    .select("id")
     .eq("id", parsed.data.playerId)
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();
@@ -42,24 +43,24 @@ export async function createGatePassEntry(
     return { error: "Player not found." };
   }
 
-  const action = player.is_checked_in ? "check_out" : "check_in";
-
-  const { error: logError } = await supabase.from("gate_pass_logs").insert({
-    player_id: player.id,
-    centre_id: centreAdmin.centre_id!,
-    action,
-    reason: parsed.data.reason,
-    performed_by: centreAdmin.id,
+  // Penetration test finding: this used to read is_checked_in, compute the
+  // opposite action from that read, then write the log and the flipped
+  // boolean as separate round trips — a TOCTOU race confirmed exploitable
+  // by two near-simultaneous submissions (a double-click is enough).
+  // toggle_gate_pass does the read-toggle-log sequence inside one Postgres
+  // function call, serialized by the row lock the UPDATE takes — see its
+  // migration.
+  const { error } = await supabase.rpc("toggle_gate_pass", {
+    p_player_id: player.id,
+    p_centre_id: centreAdmin.centre_id!,
+    p_reason: parsed.data.reason,
+    p_performed_by: centreAdmin.id,
   });
 
-  if (logError) {
+  if (error) {
+    logError(`Failed to record gate pass for player ${player.id}:`, error);
     return { error: "Failed to record gate pass." };
   }
-
-  await supabase
-    .from("players")
-    .update({ is_checked_in: !player.is_checked_in })
-    .eq("id", player.id);
 
   revalidatePath(PATH);
   return undefined;

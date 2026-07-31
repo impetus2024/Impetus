@@ -4,6 +4,7 @@ import * as z from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/logger";
 
 const PATH = "/centre-admin/packages";
 
@@ -45,7 +46,10 @@ export async function createPackage(
     duration: parsed.data.duration,
   });
 
-  if (error) return { error: "Failed to create package." };
+  if (error) {
+    logError(`Failed to create package for centre ${centreAdmin.centre_id}:`, error);
+    return { error: "Failed to create package." };
+  }
 
   revalidatePath(PATH);
   return undefined;
@@ -75,7 +79,10 @@ export async function updatePackage(
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!);
 
-  if (error) return { error: "Failed to save package." };
+  if (error) {
+    logError(`Failed to save package ${id}:`, error);
+    return { error: "Failed to save package." };
+  }
 
   revalidatePath(PATH);
   return undefined;
@@ -85,11 +92,16 @@ export async function setPackageActive(id: string, active: boolean) {
   const centreAdmin = await requireRole("centre_admin");
   const supabase = await createClient();
 
-  await supabase
+  const { error } = await supabase
     .from("packages")
     .update({ is_active: active })
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!);
+
+  if (error) {
+    logError(`Failed to ${active ? "activate" : "deactivate"} package ${id}:`, error);
+    throw new Error("Failed to save.");
+  }
 
   revalidatePath(PATH);
 }

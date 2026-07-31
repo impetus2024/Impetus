@@ -1,21 +1,24 @@
 // One-off local-testing helper: provisions one account per role (Centre
 // Admin, Coach, Medical, Parent) against the first existing centre, all
 // with DEV_DEFAULT_PASSWORD. Not part of the app — run manually:
-//   node --env-file=.env.local -r tsx/cjs scripts/seed-test-accounts.ts
+//   node --env-file=.env.local -r tsx/cjs scripts/seed-test-accounts.ts [--dry-run]
 import { createClient } from "@supabase/supabase-js";
+import { assertLocalOrConfirmed, isDryRun } from "./lib/db-guard";
 
 async function main() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const target = assertLocalOrConfirmed("seed-test-accounts");
+  const dryRun = isDryRun();
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const password = process.env.DEV_DEFAULT_PASSWORD;
 
-  if (!url || !serviceRoleKey || !password) {
+  if (!target.url || !serviceRoleKey || !password) {
     throw new Error(
       "Missing NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or DEV_DEFAULT_PASSWORD"
     );
   }
 
-  const supabase = createClient(url, serviceRoleKey, {
+  const supabase = createClient(target.url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
@@ -47,6 +50,11 @@ async function main() {
 
     if (existing) {
       console.log(`Already exists, skipping: ${account.email}`);
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(`[dry-run] Would create ${account.role}: ${account.email}`);
       continue;
     }
 

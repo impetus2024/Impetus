@@ -4,8 +4,18 @@
 // existing test accounts from seed-test-accounts.ts, so each role's
 // dashboard and list pages have something real to show. Not part of the
 // app — run manually:
-//   node --env-file=.env.local -r tsx/cjs scripts/seed-mock-data.ts
+//   node --env-file=.env.local -r tsx/cjs scripts/seed-mock-data.ts [--dry-run]
 import { createClient } from "@supabase/supabase-js";
+import { assertLocalOrConfirmed, isDryRun } from "./lib/db-guard";
+
+const SEEDED_PLAYER_NAMES = [
+  "Arjun Mehta",
+  "Rohan Sharma",
+  "Kabir Singh",
+  "Aditya Rao",
+  "Vihaan Nair",
+  "Ishaan Gupta",
+];
 
 function daysAgo(n: number) {
   const d = new Date();
@@ -26,13 +36,15 @@ function yearsAgo(n: number) {
 }
 
 async function main() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const target = assertLocalOrConfirmed("seed-mock-data");
+  const dryRun = isDryRun();
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) {
+  if (!target.url || !serviceRoleKey) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
 
-  const supabase = createClient(url, serviceRoleKey, {
+  const supabase = createClient(target.url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
@@ -67,6 +79,32 @@ async function main() {
     .eq("id", centreAdmin.centre_id)
     .single();
   if (centreError) throw centreError;
+
+  // Idempotency guard: the seeded players are named and centre-scoped, so
+  // their presence means this centre's mock dataset already exists — the
+  // rest of this script uses plain .insert() (not upsert) for the tables
+  // that depend on them, which would otherwise duplicate every rerun.
+  const { data: existingPlayers, error: existingPlayersError } = await supabase
+    .from("players")
+    .select("id")
+    .eq("centre_id", centre.id)
+    .in("name", SEEDED_PLAYER_NAMES)
+    .limit(1);
+  if (existingPlayersError) throw existingPlayersError;
+  if (existingPlayers && existingPlayers.length > 0) {
+    console.log(`Mock data already seeded for centre "${centre.name}" — skipping (rerun-safe).`);
+    return;
+  }
+
+  if (dryRun) {
+    console.log(
+      `[dry-run] Would seed for centre "${centre.name}": 3 player types, 3 age categories, ` +
+        `3 packages, 2 batches, ${SEEDED_PLAYER_NAMES.length} players, 2 parent links, ` +
+        `${SEEDED_PLAYER_NAMES.length * 3} payments, 6 gate pass logs, ` +
+        `${SEEDED_PLAYER_NAMES.length * 7} attendance records, 2 injury reports.`
+    );
+    return;
+  }
 
   // ---- player types ----
   const { data: playerTypes, error: ptError } = await supabase
