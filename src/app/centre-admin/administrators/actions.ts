@@ -62,15 +62,17 @@ export async function createAdministrator(
   }
 
   let userId: string;
+  let emailSent: boolean;
   try {
-    const user = await provisionUser({
+    const result = await provisionUser({
       email: parsed.data.email,
       fullName: parsed.data.name,
       role: parsed.data.role,
       centreId: centreAdmin.centre_id!,
       loginUrl: absoluteUrl("/login"),
     });
-    userId = user.id;
+    userId = result.user.id;
+    emailSent = result.emailSent;
   } catch (err) {
     // provisionUser already tolerates email-delivery failures internally
     // (see its own catch around sendAccountInviteEmail) — reaching here
@@ -125,6 +127,13 @@ export async function createAdministrator(
   }
 
   revalidatePath("/centre-admin/administrators");
+
+  if (!emailSent) {
+    return {
+      error:
+        "Account created, but the invite email couldn't be sent — use \"Reset Password\" from this administrator's row to generate a temporary password you can share directly.",
+    };
+  }
   return undefined;
 }
 

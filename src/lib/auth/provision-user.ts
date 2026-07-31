@@ -1,5 +1,6 @@
 import "server-only";
 import { randomBytes } from "crypto";
+import type { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAccountInviteEmail } from "@/lib/email/send";
 import { logError, logWarning } from "@/lib/logger";
@@ -30,7 +31,7 @@ export async function provisionUser(params: {
   role: UserRole;
   centreId?: string;
   loginUrl: string;
-}) {
+}): Promise<{ user: User; emailSent: boolean }> {
   const { email, fullName, role, centreId, loginUrl } = params;
   const tempPassword = generateTempPassword();
   const admin = createAdminClient();
@@ -50,13 +51,18 @@ export async function provisionUser(params: {
   // The account is already usable at this point (password is set above).
   // Email delivery is a notification, not a precondition — don't undo the
   // account creation just because RESEND_API_KEY isn't configured yet.
+  // emailSent is reported back to the caller (see resetUserPassword below)
+  // so the UI can tell the operator when nothing actually went out, instead
+  // of silently succeeding with no way to reach the new account.
+  let emailSent = false;
   try {
     await sendAccountInviteEmail({ to: email, fullName, tempPassword, loginUrl });
+    emailSent = true;
   } catch (err) {
     logWarning(`Invite email not sent for ${email}:`, err);
   }
 
-  return data.user;
+  return { user: data.user, emailSent };
 }
 
 // Recovery path for accounts that can't use self-service "forgot password"

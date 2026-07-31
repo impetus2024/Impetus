@@ -105,7 +105,7 @@ async function resolveParentProfileId(email: string, fullName: string) {
 
   if (existing) return existing.id;
 
-  const user = await provisionUser({
+  const { user } = await provisionUser({
     email,
     fullName,
     role: "parent",
