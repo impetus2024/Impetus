@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadDocFields } from "@/lib/storage/upload-doc-fields";
-import { provisionUser, resetUserPassword } from "@/lib/auth/provision-user";
+import { provisionUser, resetUserPassword, ProvisionUserError } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
 import { logError } from "@/lib/logger";
 import type { Database } from "@/lib/supabase/database.types";
@@ -77,9 +77,15 @@ export async function createAdministrator(
     // provisionUser already tolerates email-delivery failures internally
     // (see its own catch around sendAccountInviteEmail) — reaching here
     // means the auth account itself failed to create, most commonly a
-    // duplicate email.
+    // duplicate email (ProvisionUserError carries a specific message for
+    // that case).
     logError(`Failed to provision administrator account for ${parsed.data.email}:`, err);
-    return { error: "Failed to create the account — that email may already be in use." };
+    return {
+      error:
+        err instanceof ProvisionUserError
+          ? err.message
+          : "Failed to create the account — please try again.",
+    };
   }
 
   // profiles row for the new user only exists once the auth trigger runs

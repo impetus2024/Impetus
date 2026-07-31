@@ -6,6 +6,11 @@ import { sendAccountInviteEmail } from "@/lib/email/send";
 import { logError, logWarning } from "@/lib/logger";
 import type { UserRole } from "@/lib/auth/roles";
 
+// Thrown for rejections the caller should show back to the user as-is
+// (same convention as UploadValidationError in r2.ts), as opposed to a
+// generic "something went wrong".
+export class ProvisionUserError extends Error {}
+
 function generateTempPassword(): string {
   // DEV_DEFAULT_PASSWORD lets every provisioned account share one known
   // password during local testing, when there's no email service to
@@ -43,6 +48,16 @@ export async function provisionUser(params: {
     app_metadata: { role, centre_id: centreId ?? null },
     user_metadata: { full_name: fullName },
   });
+
+  // Confirmed in production (2026-07-31): createUser's error carries this
+  // exact code (status 422) when the email is already registered to another
+  // account — surfaced as a specific, actionable message rather than the
+  // generic fallback below.
+  if (error?.code === "email_exists") {
+    throw new ProvisionUserError(
+      "An account with this email already exists — they may already be registered under a different role or centre."
+    );
+  }
 
   if (error || !data.user) {
     throw error ?? new Error("Failed to create user");

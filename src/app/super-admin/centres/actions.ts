@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { uploadFile, deleteFile, UploadValidationError } from "@/lib/storage/r2";
-import { provisionUser } from "@/lib/auth/provision-user";
+import { provisionUser, ProvisionUserError } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
 import { logError } from "@/lib/logger";
 
@@ -102,7 +102,11 @@ export async function createCentre(
     }
   } catch (err) {
     logError(`Failed to provision first admin for centre ${centre.id}:`, err);
-    warnings.push("failed to create the Centre Admin account — add one from the centre's row instead");
+    warnings.push(
+      err instanceof ProvisionUserError
+        ? err.message
+        : "failed to create the Centre Admin account — add one from the centre's row instead"
+    );
   }
 
   revalidatePath("/super-admin/centres");
@@ -249,7 +253,12 @@ export async function inviteCentreAdmin(
     emailSent = result.emailSent;
   } catch (err) {
     logError(`Failed to invite centre admin for centre ${centreId}:`, err);
-    return { error: "Failed to create the Centre Admin account." };
+    return {
+      error:
+        err instanceof ProvisionUserError
+          ? err.message
+          : "Failed to create the Centre Admin account.",
+    };
   }
 
   revalidatePath("/super-admin/centres");
