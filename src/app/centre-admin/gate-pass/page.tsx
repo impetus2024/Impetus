@@ -85,7 +85,8 @@ export default async function GatePassPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string; from?: string; to?: string }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const { q, status, from, to } = await searchParams;
   const supabase = await createClient();
 
@@ -138,7 +139,7 @@ export default async function GatePassPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Gate Pass</h1>
-        <AddGatePassDialog players={players ?? []} />
+        {canEdit && <AddGatePassDialog players={players ?? []} />}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

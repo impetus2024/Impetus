@@ -75,22 +75,26 @@ export function LookupManager({
   createAction,
   renameAction,
   toggleAction,
+  canEdit = true,
 }: {
   items: LookupItem[];
   itemLabel: string;
   createAction: (prev: LookupFormState, formData: FormData) => Promise<LookupFormState>;
   renameAction: (id: string, prev: LookupFormState, formData: FormData) => Promise<LookupFormState>;
   toggleAction: (id: string, active: boolean) => Promise<void>;
+  canEdit?: boolean;
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <ItemDialog
-          trigger={<Button>Add {itemLabel}</Button>}
-          title={`Add ${itemLabel}`}
-          action={createAction}
-        />
-      </div>
+      {canEdit && (
+        <div className="flex justify-end">
+          <ItemDialog
+            trigger={<Button>Add {itemLabel}</Button>}
+            title={`Add ${itemLabel}`}
+            action={createAction}
+          />
+        </div>
+      )}
       <Table>
         <TableHeader>
           <TableRow>
@@ -109,23 +113,29 @@ export function LookupManager({
                 </Badge>
               </TableCell>
               <TableCell className="flex justify-end gap-2">
-                <ItemDialog
-                  trigger={
-                    <Button variant="outline" size="sm">
-                      Edit
+                {canEdit ? (
+                  <>
+                    <ItemDialog
+                      trigger={
+                        <Button variant="outline" size="sm">
+                          Edit
+                        </Button>
+                      }
+                      title={`Edit ${itemLabel}`}
+                      defaultValue={item.name}
+                      action={renameAction.bind(null, item.id)}
+                    />
+                    <Button
+                      variant={item.is_active ? "destructive" : "default"}
+                      size="sm"
+                      onClick={() => toggleAction(item.id, !item.is_active)}
+                    >
+                      {item.is_active ? "Disable" : "Enable"}
                     </Button>
-                  }
-                  title={`Edit ${itemLabel}`}
-                  defaultValue={item.name}
-                  action={renameAction.bind(null, item.id)}
-                />
-                <Button
-                  variant={item.is_active ? "destructive" : "default"}
-                  size="sm"
-                  onClick={() => toggleAction(item.id, !item.is_active)}
-                >
-                  {item.is_active ? "Disable" : "Enable"}
-                </Button>
+                  </>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
               </TableCell>
             </TableRow>
           ))}

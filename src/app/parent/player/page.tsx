@@ -6,13 +6,14 @@ import { getParentChildren } from "@/lib/parent/children";
 import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
 import { Card, CardContent } from "@/components/ui/card";
 import { InjuryReportsTable } from "@/components/injuries/injury-reports-table";
-import { PackagesSection } from "@/components/profile/packages-section";
 import { ProfileCard } from "@/components/profile/profile-card";
 import { ProfileMenu, type ProfileSection } from "@/components/profile/profile-menu";
 import { AttendanceCalendar } from "@/components/profile/attendance-calendar";
 import { FiveSResultsView } from "@/components/profile/five-s-results-view";
 import { PlayerProfileView } from "@/components/profile/player-profile-view";
 import { ParentProfileView } from "@/components/profile/parent-profile-view";
+import { PackageDetailsSection } from "@/components/profile/package-details-section";
+import { DocumentsSection } from "@/components/profile/documents-section";
 import { ChildSelect } from "../child-select";
 
 type Option = { id: string; name: string };
@@ -29,7 +30,15 @@ export default async function ParentPlayerPage({
   const children = await getParentChildren(parent.id);
   const selectedId = playerId || children[0]?.id;
 
-  const validSections: ProfileSection[] = ["profile", "parent", "attendance", "injuries", "packages", "5s"];
+  const validSections: ProfileSection[] = [
+    "profile",
+    "parent",
+    "packageDetails",
+    "documents",
+    "attendance",
+    "injuries",
+    "5s",
+  ];
   const section: ProfileSection = validSections.includes(sectionParam as ProfileSection)
     ? (sectionParam as ProfileSection)
     : "profile";
@@ -96,6 +105,16 @@ async function PlayerProfileSections({
     resolveOne(admin, "batches", player.batch_id),
   ]);
 
+  // Same no-RLS-for-parent reasoning as resolveOne above, but the "Package
+  // Details" view needs price/discount/custom fields too, not just id/name.
+  const { data: packageDetails } = player.package_id
+    ? await admin
+        .from("packages")
+        .select("name, price, is_custom, custom_amount, discount")
+        .eq("id", player.package_id)
+        .maybeSingle()
+    : { data: null };
+
   const documentLinks = await resolveDocumentLinks({
     profilePicture: player.profile_picture_path,
     aadhaar: player.aadhaar_doc_path,
@@ -120,7 +139,7 @@ async function PlayerProfileSections({
             <ProfileMenu
               basePath={basePath}
               active={section}
-              sections={["profile", "parent", "attendance", "injuries", "packages", "5s"]}
+              sections={["profile", "parent", "packageDetails", "documents", "attendance", "injuries", "5s"]}
             />
           </CardContent>
         </Card>
@@ -173,6 +192,33 @@ async function PlayerProfileSections({
             />
           )}
 
+          {section === "packageDetails" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold">Package Details</h2>
+                <p className="text-sm text-muted-foreground">Package and payment terms for this player</p>
+              </div>
+              <PackageDetailsSection
+                packageName={packageDetails?.name ?? null}
+                price={packageDetails?.price ?? null}
+                isCustom={packageDetails?.is_custom ?? false}
+                customAmount={packageDetails?.is_custom ? packageDetails.custom_amount : null}
+                discount={packageDetails?.is_custom ? packageDetails.discount : null}
+                assignedAt={player.created_at}
+              />
+            </div>
+          )}
+
+          {section === "documents" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold">Documents</h2>
+                <p className="text-sm text-muted-foreground">Uploaded for this player</p>
+              </div>
+              <DocumentsSection documentLinks={documentLinks} />
+            </div>
+          )}
+
           {section === "attendance" && (
             <AttendanceCalendar playerId={playerId} month={month} basePath={`${basePath}&section=attendance`} />
           )}
@@ -184,16 +230,6 @@ async function PlayerProfileSections({
                 <p className="text-sm text-muted-foreground">Reported by coach or medical staff</p>
               </div>
               <InjuryReportsTable playerId={playerId} />
-            </div>
-          )}
-
-          {section === "packages" && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold">Packages</h2>
-                <p className="text-sm text-muted-foreground">Packages taken and payment history</p>
-              </div>
-              <PackagesSection playerId={playerId} />
             </div>
           )}
 

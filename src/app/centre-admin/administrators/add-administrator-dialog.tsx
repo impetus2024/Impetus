@@ -90,7 +90,13 @@ export function AddAdministratorDialog() {
                   <SelectTrigger id="role" className="w-full">
                     <SelectValue placeholder="Select role">
                       {(value: string) =>
-                        ({ centre_admin: "Centre Admin", coach: "Coach", medical: "Medical" })[value] ?? value
+                        ({
+                          centre_admin: "Centre Admin",
+                          coach: "Coach",
+                          medical: "Medical",
+                          staff: "Staff",
+                          finance: "Finance",
+                        })[value] ?? value
                       }
                     </SelectValue>
                   </SelectTrigger>
@@ -98,6 +104,8 @@ export function AddAdministratorDialog() {
                     <SelectItem value="centre_admin">Centre Admin</SelectItem>
                     <SelectItem value="coach">Coach</SelectItem>
                     <SelectItem value="medical">Medical</SelectItem>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>

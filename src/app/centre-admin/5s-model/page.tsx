@@ -25,7 +25,8 @@ export default async function CentreAdmin5sModelPage({
 }: {
   searchParams: Promise<{ q?: string; batchId?: string; page?: string }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const { q, batchId, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
@@ -69,11 +70,13 @@ export default async function CentreAdmin5sModelPage({
       <TestingWindowBanner
         status={windowStatus}
         action={
-          <TestingWindowDialog
-            currentStart={centre?.five_s_window_start ?? null}
-            currentEnd={centre?.five_s_window_end ?? null}
-            triggerLabel={windowStatus.status === "none" ? "Set Testing Window" : "Edit Testing Window"}
-          />
+          canEdit ? (
+            <TestingWindowDialog
+              currentStart={centre?.five_s_window_start ?? null}
+              currentEnd={centre?.five_s_window_end ?? null}
+              triggerLabel={windowStatus.status === "none" ? "Set Testing Window" : "Edit Testing Window"}
+            />
+          ) : undefined
         }
       />
 

@@ -35,20 +35,27 @@ const ROLE_LABEL: Record<string, string> = {
   centre_admin: "Centre Admin",
   coach: "Coach",
   medical: "Medical",
+  staff: "Staff",
+  finance: "Finance",
 };
 
 const ROLE_OPTIONS = [
   { id: "centre_admin", name: "Centre Admin" },
   { id: "coach", name: "Coach" },
   { id: "medical", name: "Medical" },
+  { id: "staff", name: "Staff" },
+  { id: "finance", name: "Finance" },
 ];
+
+const MANAGED_ROLES = ["centre_admin", "coach", "medical", "staff", "finance"] as const;
 
 export default async function AdministratorsPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; role?: string; status?: string; page?: string }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const { q, role, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
@@ -58,13 +65,13 @@ export default async function AdministratorsPage({
     .from("profiles")
     .select("id, full_name, email, role, is_active", { count: "exact" })
     .eq("centre_id", centreAdmin.centre_id!)
-    .in("role", ["centre_admin", "coach", "medical"]);
+    .in("role", MANAGED_ROLES);
 
   if (q) {
     const safeQ = escapeOrFilterValue(q);
     query = query.or(`full_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`);
   }
-  if (role) query = query.eq("role", role as "centre_admin" | "coach" | "medical");
+  if (role) query = query.eq("role", role as (typeof MANAGED_ROLES)[number]);
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
 
@@ -75,7 +82,7 @@ export default async function AdministratorsPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Administrator Management</h1>
-        <AddAdministratorDialog />
+        {canEdit && <AddAdministratorDialog />}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -117,6 +124,7 @@ export default async function AdministratorsPage({
                   profileId={a.id}
                   isActive={a.is_active}
                   isSelf={a.id === centreAdmin.id}
+                  canEdit={canEdit}
                 />
               </TableCell>
             </TableRow>

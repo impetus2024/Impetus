@@ -13,7 +13,7 @@ export default async function CentreAdmin5sModelResultsPage({
   params: Promise<{ playerId: string }>;
 }) {
   const { playerId } = await params;
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
   const supabase = await createClient();
 
   const { data: player } = await supabase

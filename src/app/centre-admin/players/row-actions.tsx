@@ -8,9 +8,11 @@ import { setPlayerActive } from "./actions";
 export function PlayerRowActions({
   playerId,
   isActive,
+  canEdit,
 }: {
   playerId: string;
   isActive: boolean;
+  canEdit: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -21,16 +23,18 @@ export function PlayerRowActions({
         size="sm"
         render={<Link href={`/centre-admin/players/${playerId}`}>View Profile</Link>}
       />
-      <Button
-        variant={isActive ? "destructive" : "default"}
-        size="sm"
-        disabled={pending}
-        onClick={() =>
-          startTransition(() => setPlayerActive(playerId, !isActive))
-        }
-      >
-        {isActive ? "Deactivate" : "Activate"}
-      </Button>
+      {canEdit && (
+        <Button
+          variant={isActive ? "destructive" : "default"}
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            startTransition(() => setPlayerActive(playerId, !isActive))
+          }
+        >
+          {isActive ? "Deactivate" : "Activate"}
+        </Button>
+      )}
     </div>
   );
 }

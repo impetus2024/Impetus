@@ -5,12 +5,20 @@ import {
   ClipboardCheck,
   HeartPulse,
   Package2,
+  FileText,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ProfileSection = "profile" | "parent" | "attendance" | "injuries" | "packages" | "5s";
+export type ProfileSection =
+  | "profile"
+  | "parent"
+  | "attendance"
+  | "injuries"
+  | "packageDetails"
+  | "documents"
+  | "5s";
 
 const DEFAULT_SECTIONS: ProfileSection[] = ["profile", "parent", "attendance", "injuries", "5s"];
 
@@ -19,7 +27,8 @@ const SECTION_META: Record<ProfileSection, { label: string; icon: LucideIcon }> 
   parent: { label: "Parent Profile", icon: Users },
   attendance: { label: "Attendance", icon: ClipboardCheck },
   injuries: { label: "Injuries", icon: HeartPulse },
-  packages: { label: "Packages", icon: Package2 },
+  packageDetails: { label: "Package Details", icon: Package2 },
+  documents: { label: "Documents", icon: FileText },
   "5s": { label: "5S Model Result", icon: Sparkles },
 };
 
@@ -31,7 +40,7 @@ export function ProfileMenu({
   /** e.g. "/centre-admin/players/[id]" or "/parent/player?playerId=[id]" — section gets appended as `?section=` or `&section=`. */
   basePath: string;
   active: ProfileSection;
-  /** Which sections to show, in order. Defaults to the standard 5 (no Packages) — pass explicitly to add Packages, e.g. for the parent view. */
+  /** Which sections to show, in order. Defaults to the standard 5 — pass explicitly to add more, e.g. Package Details/Documents. */
   sections?: ProfileSection[];
 }) {
   const sep = basePath.includes("?") ? "&" : "?";

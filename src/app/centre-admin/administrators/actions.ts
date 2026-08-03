@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadDocFields } from "@/lib/storage/upload-doc-fields";
+import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
 import { provisionUser, resetUserPassword, ProvisionUserError } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
 import { logError } from "@/lib/logger";
@@ -13,7 +13,10 @@ import type { Database } from "@/lib/supabase/database.types";
 
 type StaffProfileInsert = Database["public"]["Tables"]["staff_profiles"]["Insert"];
 
-const StaffRole = z.enum(["centre_admin", "coach", "medical"]);
+// Staff/Finance are read-only accounts (view the same data centre_admin
+// sees, no mutation rights anywhere else in the app) — see the 20260803*
+// migrations for the RLS side of that.
+const StaffRole = z.enum(["centre_admin", "coach", "medical", "staff", "finance"]);
 
 const AdministratorSchema = z.object({
   name: z.string().min(1, { error: "Name is required." }),
@@ -198,30 +201,72 @@ export async function updateAdministrator(
     return { error: "Administrator not found." };
   }
 
-  await supabase
+  const { error: nameError } = await supabase
     .from("profiles")
     .update({ full_name: parsed.data.name })
     .eq("id", profileId);
 
+  if (nameError) {
+    logError(`Failed to save name for administrator ${profileId}:`, nameError);
+    return { error: "Failed to save changes." };
+  }
+
+  type DocColumn =
+    | "aadhaar_doc_path"
+    | "birth_certificate_path"
+    | "profile_picture_path"
+    | "other_documents_path";
+  const docFields: { formKey: string; column: DocColumn }[] = [
+    { formKey: "aadhaarCard", column: "aadhaar_doc_path" },
+    { formKey: "birthCertificate", column: "birth_certificate_path" },
+    { formKey: "profilePicture", column: "profile_picture_path" },
+    { formKey: "otherDocuments", column: "other_documents_path" },
+  ];
+
+  const { data: existing } = await supabase
+    .from("staff_profiles")
+    .select("aadhaar_doc_path, birth_certificate_path, profile_picture_path, other_documents_path")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+
+  const uploads = await uploadDocFields(formData, docFields, `staff-documents/${profileId}`, centreAdmin.id);
+  if (uploads.error) {
+    return { error: uploads.error };
+  }
+
+  // upsert, not update: an administrator provisioned outside this form's own
+  // "create" flow (the centre's first admin, auto-provisioned by
+  // super-admin's createCentre; or a directly-seeded test account) never
+  // gets a staff_profiles row in the first place. update() against a
+  // profile_id with no matching row silently affects zero rows and returns
+  // no error — every field on this form would appear to save while nothing
+  // actually persisted. upsert creates the row the first time, updates it
+  // after.
   const { error } = await supabase
     .from("staff_profiles")
-    .update({
-      contact_number: parsed.data.contactNumber,
-      date_of_birth: parsed.data.dateOfBirth ?? null,
-      address_line1: parsed.data.addressLine1 ?? null,
-      address_line2: parsed.data.addressLine2 ?? null,
-      country: parsed.data.country ?? null,
-      state: parsed.data.state ?? null,
-      city: parsed.data.city ?? null,
-      pincode: parsed.data.pincode ?? null,
-      date_of_joining: parsed.data.dateOfJoining ?? null,
-    })
-    .eq("profile_id", profileId);
+    .upsert(
+      {
+        profile_id: profileId,
+        contact_number: parsed.data.contactNumber,
+        date_of_birth: parsed.data.dateOfBirth ?? null,
+        address_line1: parsed.data.addressLine1 ?? null,
+        address_line2: parsed.data.addressLine2 ?? null,
+        country: parsed.data.country ?? null,
+        state: parsed.data.state ?? null,
+        city: parsed.data.city ?? null,
+        pincode: parsed.data.pincode ?? null,
+        date_of_joining: parsed.data.dateOfJoining ?? null,
+        ...uploads.values,
+      },
+      { onConflict: "profile_id" }
+    );
 
   if (error) {
     logError(`Failed to save staff_profiles for administrator ${profileId}:`, error);
     return { error: "Failed to save changes." };
   }
+
+  if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 
   revalidatePath(`/centre-admin/administrators/${profileId}`);
   revalidatePath("/centre-admin/administrators");
@@ -283,7 +328,7 @@ export async function resetAdministratorPassword(
     .select("id, email, full_name")
     .eq("id", profileId)
     .eq("centre_id", centreAdmin.centre_id!)
-    .in("role", ["centre_admin", "coach", "medical"])
+    .in("role", ["centre_admin", "coach", "medical", "staff", "finance"])
     .maybeSingle();
 
   if (!staff) {

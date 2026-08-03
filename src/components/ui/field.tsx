@@ -7,6 +7,17 @@ import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
+// Shared input treatment for forms that use a borderless, filled look
+// (transparent border, muted background, background lifts on focus)
+// instead of the default outlined Input/Select — first established in the
+// player edit form, now the standard for every Field-based form. h-9
+// matches the control height used elsewhere in the app (list-search,
+// list-filter, date-range-filter); the data-[size=default]:h-9 variant is
+// needed too since SelectTrigger sets its own height via that same
+// data-attribute selector, which a plain "h-9" can't reliably override.
+export const FILLED_INPUT =
+  "h-9 data-[size=default]:h-9 border-transparent bg-muted/60 focus-visible:bg-background"
+
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
     <fieldset
