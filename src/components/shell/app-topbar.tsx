@@ -11,6 +11,7 @@ import {
   Sun,
   Moon,
   LogOut,
+  KeyRound,
   ChevronRight,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { logout } from "@/lib/auth/actions";
+import { ChangePasswordDialog } from "./change-password-dialog";
 import { BrandMark } from "./brand-mark";
 import { SidebarNavContent } from "./sidebar-nav-content";
 import { NAV_BY_KEY, type NavGroup, type NavKey } from "./nav-config";
@@ -87,6 +89,7 @@ export function AppTopbar({
   const breadcrumb = useBreadcrumb(groups, roleLabel);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   const allItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const results = useMemo(() => {
@@ -227,6 +230,11 @@ export function AppTopbar({
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setPasswordDialogOpen(true)}>
+            <KeyRound className="size-4" />
+            Reset Password
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {
@@ -238,6 +246,8 @@ export function AppTopbar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ChangePasswordDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen} />
     </header>
   );
 }

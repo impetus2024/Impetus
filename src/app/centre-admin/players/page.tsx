@@ -25,7 +25,8 @@ export default async function PlayersPage({
 }: {
   searchParams: Promise<{ q?: string; batchId?: string; playerTypeId?: string; status?: string; page?: string }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const { q, batchId, playerTypeId, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
@@ -62,7 +63,7 @@ export default async function PlayersPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Player Management</h1>
-        <Button render={<Link href="/centre-admin/players/new">Add Player</Link>} />
+        {canEdit && <Button render={<Link href="/centre-admin/players/new">Add Player</Link>} />}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -103,7 +104,7 @@ export default async function PlayersPage({
                 </Badge>
               </TableCell>
               <TableCell>
-                <PlayerRowActions playerId={player.id} isActive={player.is_active} />
+                <PlayerRowActions playerId={player.id} isActive={player.is_active} canEdit={canEdit} />
               </TableCell>
             </TableRow>
           ))}

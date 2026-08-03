@@ -4,20 +4,20 @@ import { useActionState, useState } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { Field, FieldLabel, FieldGroup, FieldDescription, FILLED_INPUT } from "@/components/ui/field";
 import { ParentProfileView, type ParentProfileViewValues } from "@/components/profile/parent-profile-view";
 import type { PlayerFormState } from "../actions";
-
-const FILLED_INPUT = "border-transparent bg-muted/60 focus-visible:bg-background";
 
 export type ParentProfileDefaultValues = ParentProfileViewValues;
 
 export function ParentProfileForm({
   action,
   defaultValues,
+  canEdit = true,
 }: {
   action: (prev: PlayerFormState, formData: FormData) => Promise<PlayerFormState>;
   defaultValues: ParentProfileDefaultValues;
+  canEdit?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const [isEditing, setIsEditing] = useState(false);
@@ -37,12 +37,14 @@ export function ParentProfileForm({
   if (!isEditing) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-            <Pencil className="size-3.5" />
-            Edit
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
+          </div>
+        )}
         <ParentProfileView values={defaultValues} />
       </div>
     );

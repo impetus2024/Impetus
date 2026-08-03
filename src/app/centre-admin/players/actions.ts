@@ -23,35 +23,43 @@ function optionalStr(v: FormDataEntryValue | null) {
   return s ? s : undefined;
 }
 
+// Every field is mandatory except the ones explicitly kept optional below
+// (Birth Mark, Medical Condition, Food Allergy, AIFF Number, Passport
+// Number, Upload Medical Records, Mother Name, Address Line 2) — mirrors
+// the `required` attributes in player-form.tsx, so a request that bypasses
+// the client can't skip the same validation.
 const PlayerSchema = z.object({
   name: z.string().min(1, { error: "Name is required." }),
   dateOfBirth: z.string().min(1, { error: "Date of birth is required." }),
-  ageCategoryId: z.string().optional(),
-  email: z.email({ error: "Enter a valid player email." }).optional(),
-  contactNumber: z.string().optional(),
-  playerTypeId: z.string().optional(),
-  packageId: z.string().optional(),
-  batchId: z.string().optional(),
-  gender: z.string().optional(),
-  bloodGroup: z.string().optional(),
-  heightCm: z.coerce.number().optional(),
-  weightKg: z.coerce.number().optional(),
+  ageCategoryId: z.string().min(1, { error: "Age category is required." }),
+  email: z.email({ error: "Enter a valid player email." }),
+  contactNumber: z.string().min(1, { error: "Player contact number is required." }),
+  playerTypeId: z.string().min(1, { error: "Program type is required." }),
+  packageId: z.string().min(1, { error: "Package is required." }),
+  customPackageName: z.string().optional(),
+  customAmount: z.coerce.number().optional(),
+  customDiscount: z.coerce.number().optional(),
+  batchId: z.string().min(1, { error: "Batch allotment is required." }),
+  gender: z.string().min(1, { error: "Gender is required." }),
+  bloodGroup: z.string().min(1, { error: "Blood group is required." }),
+  heightCm: z.coerce.number({ error: "Height is required." }),
+  weightKg: z.coerce.number({ error: "Weight is required." }),
   birthMark: z.string().optional(),
   medicalCondition: z.string().optional(),
   foodAllergy: z.string().optional(),
   aiffNumber: z.string().optional(),
   passportNumber: z.string().optional(),
-  aadhaarNumber: z.string().optional(),
-  fatherName: z.string().optional(),
+  aadhaarNumber: z.string().min(1, { error: "Aadhaar number is required." }),
+  fatherName: z.string().min(1, { error: "Father / Guardian name is required." }),
   motherName: z.string().optional(),
   parentEmail: z.email({ error: "Enter a valid parent/guardian email." }),
-  parentContactNumber: z.string().optional(),
-  addressLine1: z.string().optional(),
+  parentContactNumber: z.string().min(1, { error: "Parent/guardian contact number is required." }),
+  addressLine1: z.string().min(1, { error: "Address line 1 is required." }),
   addressLine2: z.string().optional(),
-  country: z.string().optional(),
-  state: z.string().optional(),
-  city: z.string().optional(),
-  pincode: z.string().optional(),
+  country: z.string().min(1, { error: "Country is required." }),
+  state: z.string().min(1, { error: "State is required." }),
+  city: z.string().min(1, { error: "City is required." }),
+  pincode: z.string().min(1, { error: "Pincode is required." }),
 });
 
 export type PlayerFormState = { error?: string } | undefined;
@@ -65,6 +73,9 @@ function parsePlayer(formData: FormData) {
     contactNumber: optionalStr(formData.get("contactNumber")),
     playerTypeId: optionalStr(formData.get("playerTypeId")),
     packageId: optionalStr(formData.get("packageId")),
+    customPackageName: optionalStr(formData.get("customPackageName")),
+    customAmount: optionalStr(formData.get("customAmount")),
+    customDiscount: optionalStr(formData.get("customDiscount")),
     batchId: optionalStr(formData.get("batchId")),
     gender: optionalStr(formData.get("gender")),
     bloodGroup: optionalStr(formData.get("bloodGroup")),
@@ -115,6 +126,84 @@ async function resolveParentProfileId(email: string, fullName: string) {
   return user.id;
 }
 
+const CUSTOM_PACKAGE_VALUE = "custom";
+
+// "Custom" in the Package dropdown isn't a real package until this runs —
+// it creates (or, when editing a player who already has a custom package,
+// updates in place) a normal `packages` row flagged `is_custom`, so every
+// existing consumer of players.package_id (payments, the profile view,
+// dashboards) keeps working unchanged. currentPackageId is the player's
+// package_id *before* this save, passed only from update flows, so editing
+// an already-custom assignment adjusts that same row instead of leaving an
+// orphaned one behind every time the admin re-saves the form.
+async function resolvePackageId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  centreId: string,
+  playerTypeId: string | null,
+  packageId: string | undefined,
+  custom: { name?: string; amount?: number; discount?: number },
+  currentPackageId?: string | null
+): Promise<{ packageId: string | null; error?: string }> {
+  if (!packageId) return { packageId: null };
+  if (packageId !== CUSTOM_PACKAGE_VALUE) return { packageId };
+
+  if (!custom.name || custom.amount === undefined) {
+    return { packageId: null, error: "Custom package name and amount are required." };
+  }
+
+  const discount = custom.discount ?? 0;
+  const price = custom.amount - discount;
+
+  if (currentPackageId) {
+    const { data: currentPackage } = await supabase
+      .from("packages")
+      .select("id, is_custom")
+      .eq("id", currentPackageId)
+      .maybeSingle();
+
+    if (currentPackage?.is_custom) {
+      const { error } = await supabase
+        .from("packages")
+        .update({
+          name: custom.name,
+          player_type_id: playerTypeId,
+          price,
+          custom_amount: custom.amount,
+          discount,
+        })
+        .eq("id", currentPackageId);
+
+      if (error) {
+        logError(`Failed to update custom package ${currentPackageId}:`, error);
+        return { packageId: null, error: "Failed to save custom package." };
+      }
+      return { packageId: currentPackageId };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("packages")
+    .insert({
+      centre_id: centreId,
+      name: custom.name,
+      player_type_id: playerTypeId,
+      price,
+      duration: "Custom",
+      is_custom: true,
+      custom_amount: custom.amount,
+      discount,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    logError(`Failed to create custom package for centre ${centreId}:`, error);
+    return { packageId: null, error: "Failed to create custom package." };
+  }
+
+  return { packageId: data.id };
+}
+
 export async function createPlayer(
   _prev: PlayerFormState,
   formData: FormData
@@ -127,6 +216,18 @@ export async function createPlayer(
   }
   const d = parsed.data;
 
+  const supabase = await createClient();
+  const { packageId, error: packageError } = await resolvePackageId(
+    supabase,
+    centreAdmin.centre_id!,
+    d.playerTypeId ?? null,
+    d.packageId,
+    { name: d.customPackageName, amount: d.customAmount, discount: d.customDiscount }
+  );
+  if (packageError) {
+    return { error: packageError };
+  }
+
   const insert: PlayerInsert = {
     centre_id: centreAdmin.centre_id!,
     name: d.name,
@@ -135,7 +236,7 @@ export async function createPlayer(
     email: d.email ?? null,
     contact_number: d.contactNumber ?? null,
     player_type_id: d.playerTypeId ?? null,
-    package_id: d.packageId ?? null,
+    package_id: packageId,
     batch_id: d.batchId ?? null,
     gender: d.gender ?? null,
     blood_group: d.bloodGroup ?? null,
@@ -175,9 +276,17 @@ export async function createPlayer(
   if (uploads.error) {
     return { error: uploads.error };
   }
+  // Client-side `required` on the file inputs can be bypassed by a direct
+  // request — uploadDocFields only reports a key here when a file actually
+  // came through, so this is the real, server-side check.
+  if (!uploads.values.aadhaar_doc_path) {
+    return { error: "Aadhaar document is required." };
+  }
+  if (!uploads.values.profile_picture_path) {
+    return { error: "Profile picture is required." };
+  }
   Object.assign(insert, uploads.values);
 
-  const supabase = await createClient();
   const { data: player, error } = await supabase
     .from("players")
     .insert(insert)
@@ -225,6 +334,28 @@ export async function updatePlayer(
   }
   const d = parsed.data;
 
+  type DocColumn = "aadhaar_doc_path" | "medical_records_path" | "profile_picture_path";
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("players")
+    .select("aadhaar_doc_path, medical_records_path, profile_picture_path, package_id")
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .maybeSingle();
+
+  const { packageId, error: packageError } = await resolvePackageId(
+    supabase,
+    centreAdmin.centre_id!,
+    d.playerTypeId ?? null,
+    d.packageId,
+    { name: d.customPackageName, amount: d.customAmount, discount: d.customDiscount },
+    existing?.package_id
+  );
+  if (packageError) {
+    return { error: packageError };
+  }
+
   const update: PlayerUpdate = {
     name: d.name,
     date_of_birth: d.dateOfBirth,
@@ -232,7 +363,7 @@ export async function updatePlayer(
     email: d.email ?? null,
     contact_number: d.contactNumber ?? null,
     player_type_id: d.playerTypeId ?? null,
-    package_id: d.packageId ?? null,
+    package_id: packageId,
     batch_id: d.batchId ?? null,
     gender: d.gender ?? null,
     blood_group: d.bloodGroup ?? null,
@@ -260,20 +391,11 @@ export async function updatePlayer(
     update.aadhaar_number_encrypted = encryptField(d.aadhaarNumber);
   }
 
-  type DocColumn = "aadhaar_doc_path" | "medical_records_path" | "profile_picture_path";
   const docFields: { formKey: string; column: DocColumn }[] = [
     { formKey: "aadhaarDoc", column: "aadhaar_doc_path" },
     { formKey: "medicalRecords", column: "medical_records_path" },
     { formKey: "profilePicture", column: "profile_picture_path" },
   ];
-
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("players")
-    .select("aadhaar_doc_path, medical_records_path, profile_picture_path")
-    .eq("id", id)
-    .eq("centre_id", centreAdmin.centre_id!)
-    .maybeSingle();
 
   const uploads = await uploadDocFields(formData, docFields, `player-documents/${id}`, centreAdmin.id);
   if (uploads.error) {
@@ -307,6 +429,9 @@ const PlayerProfileSchema = z.object({
   contactNumber: z.string().optional(),
   playerTypeId: z.string().optional(),
   packageId: z.string().optional(),
+  customPackageName: z.string().optional(),
+  customAmount: z.coerce.number().optional(),
+  customDiscount: z.coerce.number().optional(),
   batchId: z.string().optional(),
   gender: z.string().optional(),
   bloodGroup: z.string().optional(),
@@ -334,6 +459,9 @@ export async function updatePlayerProfile(
     contactNumber: optionalStr(formData.get("contactNumber")),
     playerTypeId: optionalStr(formData.get("playerTypeId")),
     packageId: optionalStr(formData.get("packageId")),
+    customPackageName: optionalStr(formData.get("customPackageName")),
+    customAmount: optionalStr(formData.get("customAmount")),
+    customDiscount: optionalStr(formData.get("customDiscount")),
     batchId: optionalStr(formData.get("batchId")),
     gender: optionalStr(formData.get("gender")),
     bloodGroup: optionalStr(formData.get("bloodGroup")),
@@ -352,6 +480,28 @@ export async function updatePlayerProfile(
   }
   const d = parsed.data;
 
+  type DocColumn = "aadhaar_doc_path" | "medical_records_path" | "profile_picture_path";
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("players")
+    .select("aadhaar_doc_path, medical_records_path, profile_picture_path, package_id")
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .maybeSingle();
+
+  const { packageId, error: packageError } = await resolvePackageId(
+    supabase,
+    centreAdmin.centre_id!,
+    d.playerTypeId ?? null,
+    d.packageId,
+    { name: d.customPackageName, amount: d.customAmount, discount: d.customDiscount },
+    existing?.package_id
+  );
+  if (packageError) {
+    return { error: packageError };
+  }
+
   const update: PlayerUpdate = {
     name: d.name,
     date_of_birth: d.dateOfBirth,
@@ -359,7 +509,7 @@ export async function updatePlayerProfile(
     email: d.email ?? null,
     contact_number: d.contactNumber ?? null,
     player_type_id: d.playerTypeId ?? null,
-    package_id: d.packageId ?? null,
+    package_id: packageId,
     batch_id: d.batchId ?? null,
     gender: d.gender ?? null,
     blood_group: d.bloodGroup ?? null,
@@ -378,20 +528,11 @@ export async function updatePlayerProfile(
     update.aadhaar_number_encrypted = encryptField(d.aadhaarNumber);
   }
 
-  type DocColumn = "aadhaar_doc_path" | "medical_records_path" | "profile_picture_path";
   const docFields: { formKey: string; column: DocColumn }[] = [
     { formKey: "aadhaarDoc", column: "aadhaar_doc_path" },
     { formKey: "medicalRecords", column: "medical_records_path" },
     { formKey: "profilePicture", column: "profile_picture_path" },
   ];
-
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("players")
-    .select("aadhaar_doc_path, medical_records_path, profile_picture_path")
-    .eq("id", id)
-    .eq("centre_id", centreAdmin.centre_id!)
-    .maybeSingle();
 
   const uploads = await uploadDocFields(formData, docFields, `player-documents/${id}`, centreAdmin.id);
   if (uploads.error) {

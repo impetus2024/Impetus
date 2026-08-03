@@ -11,38 +11,55 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { ChangePasswordDialog } from "@/components/shell/change-password-dialog";
 import { setAdministratorActive, resetAdministratorPassword, type ResetPasswordActionState } from "./actions";
 
 export function AdministratorRowActions({
   profileId,
   isActive,
   isSelf,
+  canEdit,
 }: {
   profileId: string;
   isActive: boolean;
   isSelf: boolean;
+  canEdit: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [resetPending, startReset] = useTransition();
   const [resetResult, setResetResult] = useState<ResetPasswordActionState | null>(null);
+  const [ownPasswordDialogOpen, setOwnPasswordDialogOpen] = useState(false);
 
   return (
     <div className="flex justify-end gap-2">
       <Button variant="outline" size="sm" render={<Link href={`/centre-admin/administrators/${profileId}`}>View</Link>} />
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={resetPending}
-        onClick={() =>
-          startReset(async () => {
-            const result = await resetAdministratorPassword(profileId);
-            setResetResult(result);
-          })
-        }
-      >
-        {resetPending ? "Resetting..." : "Reset Password"}
-      </Button>
-      {!isSelf && (
+      {isSelf ? (
+        // This is the logged-in user's own row — reset here means changing
+        // their own password (current + new, twice), the same self-service
+        // flow as the topbar's "Reset Password" menu item — never the
+        // admin-generates-a-temp-password flow below, which is for
+        // resetting *someone else's* password without knowing it.
+        <Button variant="outline" size="sm" onClick={() => setOwnPasswordDialogOpen(true)}>
+          Reset your Password
+        </Button>
+      ) : (
+        canEdit && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={resetPending}
+            onClick={() =>
+              startReset(async () => {
+                const result = await resetAdministratorPassword(profileId);
+                setResetResult(result);
+              })
+            }
+          >
+            {resetPending ? "Resetting..." : "Reset Password"}
+          </Button>
+        )
+      )}
+      {!isSelf && canEdit && (
         <Button
           variant={isActive ? "destructive" : "default"}
           size="sm"
@@ -77,6 +94,8 @@ export function AdministratorRowActions({
           <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
+
+      <ChangePasswordDialog open={ownPasswordDialogOpen} onOpenChange={setOwnPasswordDialogOpen} />
     </div>
   );
 }

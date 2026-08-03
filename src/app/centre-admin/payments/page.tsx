@@ -21,7 +21,8 @@ export default async function PaymentsPage({
 }: {
   searchParams: Promise<{ q?: string; packageId?: string; page?: string }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const { q, packageId, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
@@ -48,6 +49,7 @@ export default async function PaymentsPage({
       .select("id, name")
       .eq("centre_id", centreAdmin.centre_id!)
       .eq("is_active", true)
+      .eq("is_custom", false)
       .order("name"),
   ]);
 
@@ -57,7 +59,7 @@ export default async function PaymentsPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Payment History</h1>
-        <AddPaymentDialog players={players ?? []} packages={packages ?? []} />
+        {canEdit && <AddPaymentDialog players={players ?? []} packages={packages ?? []} />}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

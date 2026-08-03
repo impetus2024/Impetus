@@ -12,7 +12,8 @@ import {
 } from "./actions";
 
 export default async function PlayerTypesPage() {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const supabase = await createClient();
 
   const [{ data: playerTypes }, { data: ageCategories }] = await Promise.all([
@@ -44,6 +45,7 @@ export default async function PlayerTypesPage() {
             createAction={createPlayerType}
             renameAction={renamePlayerType}
             toggleAction={setPlayerTypeActive}
+            canEdit={canEdit}
           />
         </TabsContent>
         <TabsContent value="age-categories">
@@ -53,6 +55,7 @@ export default async function PlayerTypesPage() {
             createAction={createAgeCategory}
             renameAction={renameAgeCategory}
             toggleAction={setAgeCategoryActive}
+            canEdit={canEdit}
           />
         </TabsContent>
       </Tabs>

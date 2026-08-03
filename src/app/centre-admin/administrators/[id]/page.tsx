@@ -8,6 +8,8 @@ const ROLE_LABEL: Record<string, string> = {
   centre_admin: "Centre Admin",
   coach: "Coach",
   medical: "Medical",
+  staff: "Staff",
+  finance: "Finance",
 };
 
 export default async function AdministratorDetailPage({
@@ -16,7 +18,8 @@ export default async function AdministratorDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const supabase = await createClient();
 
   const { data: profile } = await supabase
@@ -44,7 +47,7 @@ export default async function AdministratorDetailPage({
   const documentUrls = await resolveDocumentLinks(docKeys);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">{profile.full_name}</h1>
         <p className="text-sm text-muted-foreground">
@@ -57,6 +60,7 @@ export default async function AdministratorDetailPage({
         fullName={profile.full_name}
         isActive={profile.is_active}
         isSelf={profile.id === centreAdmin.id}
+        canEdit={canEdit}
         staffProfile={staffProfile}
         documentUrls={documentUrls}
       />

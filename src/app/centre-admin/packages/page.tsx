@@ -17,7 +17,8 @@ import { PackageRowActions } from "./row-actions";
 import { createPackage } from "./actions";
 
 export default async function PackagesPage() {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const supabase = await createClient();
 
   const [{ data: packages }, { data: playerTypes }] = await Promise.all([
@@ -25,6 +26,7 @@ export default async function PackagesPage() {
       .from("packages")
       .select("id, name, player_type_id, price, duration, is_active, player_types(name)")
       .eq("centre_id", centreAdmin.centre_id!)
+      .eq("is_custom", false)
       .order("name"),
     supabase
       .from("player_types")
@@ -38,12 +40,14 @@ export default async function PackagesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Package Management</h1>
-        <PackageFormDialog
-          trigger={<Button>Add New Package</Button>}
-          title="Add Package"
-          action={createPackage}
-          playerTypes={playerTypes ?? []}
-        />
+        {canEdit && (
+          <PackageFormDialog
+            trigger={<Button>Add New Package</Button>}
+            title="Add Package"
+            action={createPackage}
+            playerTypes={playerTypes ?? []}
+          />
+        )}
       </div>
 
       <Table>
@@ -70,7 +74,11 @@ export default async function PackagesPage() {
                 </Badge>
               </TableCell>
               <TableCell>
-                <PackageRowActions pkg={pkg} playerTypes={playerTypes ?? []} />
+                {canEdit ? (
+                  <PackageRowActions pkg={pkg} playerTypes={playerTypes ?? []} />
+                ) : (
+                  <span className="block text-right text-sm text-muted-foreground">—</span>
+                )}
               </TableCell>
             </TableRow>
           ))}

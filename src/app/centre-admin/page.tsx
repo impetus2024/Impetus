@@ -27,7 +27,8 @@ const QUICK_ACTIONS = [
 ];
 
 export default async function CentreAdminDashboard() {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const supabase = await createClient();
   const centreId = centreAdmin.centre_id!;
 
@@ -50,7 +51,7 @@ export default async function CentreAdminDashboard() {
         .from("profiles")
         .select("id", { count: "exact", head: true })
         .eq("centre_id", centreId)
-        .in("role", ["coach", "medical", "centre_admin"])
+        .in("role", ["coach", "medical", "centre_admin", "staff", "finance"])
         .eq("is_active", true),
       supabase
         .from("players")
@@ -97,14 +98,14 @@ export default async function CentreAdminDashboard() {
           tone="warning"
           title="No batches yet"
           message="Create your first training batch to start scheduling and taking attendance."
-          action={{ href: "/centre-admin/batches", label: "Create batch" }}
+          action={canEdit ? { href: "/centre-admin/batches", label: "Create batch" } : undefined}
         />
       ) : playerCount === 0 ? (
         <InsightBanner
           tone="warning"
           title="No players yet"
           message="Add your first player to start managing registrations and gate pass."
-          action={{ href: "/centre-admin/players/new", label: "Add player" }}
+          action={canEdit ? { href: "/centre-admin/players/new", label: "Add player" } : undefined}
         />
       ) : (
         <InsightBanner
@@ -168,26 +169,28 @@ export default async function CentreAdminDashboard() {
         </Card>
       </div>
 
-      <Card className="rounded-2xl border-border/70 shadow-card">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          {QUICK_ACTIONS.map((action) => (
-            <Button
-              key={action.href}
-              variant="outline"
-              className="h-auto flex-col gap-2 rounded-xl px-5 py-4"
-              render={
-                <Link href={action.href}>
-                  <action.icon className="size-5 text-primary" />
-                  <span className="text-xs font-medium">{action.label}</span>
-                </Link>
-              }
-            />
-          ))}
-        </CardContent>
-      </Card>
+      {canEdit && (
+        <Card className="rounded-2xl border-border/70 shadow-card">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {QUICK_ACTIONS.map((action) => (
+              <Button
+                key={action.href}
+                variant="outline"
+                className="h-auto flex-col gap-2 rounded-xl px-5 py-4"
+                render={
+                  <Link href={action.href}>
+                    <action.icon className="size-5 text-primary" />
+                    <span className="text-xs font-medium">{action.label}</span>
+                  </Link>
+                }
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

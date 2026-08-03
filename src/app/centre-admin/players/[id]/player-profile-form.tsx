@@ -12,14 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
+import { Field, FieldLabel, FieldGroup, FieldDescription, FILLED_INPUT } from "@/components/ui/field";
 import { PlayerProfileView, type PlayerProfileViewValues } from "@/components/profile/player-profile-view";
 import { selectLabel, cn } from "@/lib/utils";
+import { PackageField, CUSTOM_PACKAGE_VALUE, type PackageOption } from "../package-field";
 import type { PlayerFormState } from "../actions";
 
 type Option = { id: string; name: string };
-
-const FILLED_INPUT = "border-transparent bg-muted/60 focus-visible:bg-background";
 
 export type PlayerProfileDefaultValues = PlayerProfileViewValues;
 
@@ -31,17 +30,28 @@ export function PlayerProfileForm({
   batches,
   defaultValues,
   documentLinks,
+  currentPackageIsCustom,
+  customPackageName,
+  customAmount,
+  customDiscount,
+  canEdit = true,
 }: {
   action: (prev: PlayerFormState, formData: FormData) => Promise<PlayerFormState>;
   ageCategories: Option[];
   playerTypes: Option[];
-  packages: Option[];
+  packages: PackageOption[];
   batches: Option[];
   defaultValues: PlayerProfileDefaultValues;
   documentLinks?: Record<string, string>;
+  currentPackageIsCustom?: boolean;
+  customPackageName?: string | null;
+  customAmount?: number | null;
+  customDiscount?: number | null;
+  canEdit?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const [isEditing, setIsEditing] = useState(false);
+  const [playerTypeId, setPlayerTypeId] = useState(defaultValues.playerTypeId ?? "");
 
   // Return to view mode once a save completes successfully. Adjusted during
   // render (not an effect, and not a ref — both reading a ref during render
@@ -58,12 +68,14 @@ export function PlayerProfileForm({
   if (!isEditing) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-            <Pencil className="size-3.5" />
-            Edit
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+              <Pencil className="size-3.5" />
+              Edit
+            </Button>
+          </div>
+        )}
         <PlayerProfileView
           values={defaultValues}
           ageCategories={ageCategories}
@@ -127,7 +139,7 @@ export function PlayerProfileForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="playerTypeId">Program Type</FieldLabel>
-          <Select name="playerTypeId" defaultValue={defaultValues.playerTypeId ?? undefined}>
+          <Select name="playerTypeId" value={playerTypeId} onValueChange={(v) => setPlayerTypeId(v as string)}>
             <SelectTrigger id="playerTypeId" className={cn("w-full", FILLED_INPUT)}>
               <SelectValue placeholder="Select program type">
                 {selectLabel(playerTypes, "Select program type")}
@@ -142,23 +154,14 @@ export function PlayerProfileForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="packageId">Package</FieldLabel>
-          <Select name="packageId" defaultValue={defaultValues.packageId ?? undefined}>
-            <SelectTrigger id="packageId" className={cn("w-full", FILLED_INPUT)}>
-              <SelectValue placeholder="Select package">
-                {selectLabel(packages, "Select package")}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {packages.map((o) => (
-                <SelectItem key={o.id} value={o.id}>
-                  {o.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <PackageField
+          packages={packages}
+          selectedPlayerTypeId={playerTypeId || null}
+          defaultPackageId={currentPackageIsCustom ? CUSTOM_PACKAGE_VALUE : defaultValues.packageId}
+          defaultCustomName={customPackageName}
+          defaultCustomAmount={customAmount}
+          defaultCustomDiscount={customDiscount}
+        />
         <Field>
           <FieldLabel htmlFor="batchId">Batch Allotment</FieldLabel>
           <Select name="batchId" defaultValue={defaultValues.batchId ?? undefined}>

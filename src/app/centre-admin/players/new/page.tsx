@@ -23,9 +23,10 @@ export default async function NewPlayerPage() {
         .order("name"),
       supabase
         .from("packages")
-        .select("id, name")
+        .select("id, name, price, player_type_id")
         .eq("centre_id", centreAdmin.centre_id!)
         .eq("is_active", true)
+        .eq("is_custom", false)
         .order("name"),
       supabase
         .from("batches")
@@ -42,7 +43,12 @@ export default async function NewPlayerPage() {
         action={createPlayer}
         ageCategories={ageCategories ?? []}
         playerTypes={playerTypes ?? []}
-        packages={packages ?? []}
+        packages={(packages ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          playerTypeId: p.player_type_id,
+        }))}
         batches={batches ?? []}
         submitLabel="Submit"
       />

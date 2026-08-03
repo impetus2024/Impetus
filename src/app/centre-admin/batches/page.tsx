@@ -32,7 +32,8 @@ export default async function BatchesPage({
     page?: string;
   }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin");
+  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin";
   const { q, headCoachId, playerTypeId, ageCategoryId, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
@@ -88,14 +89,16 @@ export default async function BatchesPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Batch Management</h1>
-        <BatchFormDialog
-          trigger={<Button>Add Batch</Button>}
-          title="Add Batch"
-          action={createBatch}
-          coaches={coaches}
-          playerTypes={playerTypes ?? []}
-          ageCategories={ageCategories ?? []}
-        />
+        {canEdit && (
+          <BatchFormDialog
+            trigger={<Button>Add Batch</Button>}
+            title="Add Batch"
+            action={createBatch}
+            coaches={coaches}
+            playerTypes={playerTypes ?? []}
+            ageCategories={ageCategories ?? []}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -141,12 +144,16 @@ export default async function BatchesPage({
                 </Badge>
               </TableCell>
               <TableCell>
-                <BatchRowActions
-                  batch={batch}
-                  coaches={coaches}
-                  playerTypes={playerTypes ?? []}
-                  ageCategories={ageCategories ?? []}
-                />
+                {canEdit ? (
+                  <BatchRowActions
+                    batch={batch}
+                    coaches={coaches}
+                    playerTypes={playerTypes ?? []}
+                    ageCategories={ageCategories ?? []}
+                  />
+                ) : (
+                  <span className="block text-right text-sm text-muted-foreground">—</span>
+                )}
               </TableCell>
             </TableRow>
           ))}

@@ -718,9 +718,12 @@ export type Database = {
         Row: {
           centre_id: string
           created_at: string
+          custom_amount: number | null
+          discount: number | null
           duration: string
           id: string
           is_active: boolean
+          is_custom: boolean
           name: string
           player_type_id: string | null
           price: number
@@ -729,9 +732,12 @@ export type Database = {
         Insert: {
           centre_id: string
           created_at?: string
+          custom_amount?: number | null
+          discount?: number | null
           duration: string
           id?: string
           is_active?: boolean
+          is_custom?: boolean
           name: string
           player_type_id?: string | null
           price: number
@@ -740,9 +746,12 @@ export type Database = {
         Update: {
           centre_id?: string
           created_at?: string
+          custom_amount?: number | null
+          discount?: number | null
           duration?: string
           id?: string
           is_active?: boolean
+          is_custom?: boolean
           name?: string
           player_type_id?: string | null
           price?: number
@@ -1216,7 +1225,14 @@ export type Database = {
       five_s_answer_scale: "rarely" | "sometimes" | "frequently" | "always"
       five_s_category: "speed" | "stamina" | "strength" | "spirit" | "skill"
       gate_pass_action: "check_in" | "check_out"
-      user_role: "super_admin" | "centre_admin" | "coach" | "medical" | "parent"
+      user_role:
+        | "super_admin"
+        | "centre_admin"
+        | "coach"
+        | "medical"
+        | "parent"
+        | "staff"
+        | "finance"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1351,7 +1367,15 @@ export const Constants = {
       five_s_answer_scale: ["rarely", "sometimes", "frequently", "always"],
       five_s_category: ["speed", "stamina", "strength", "spirit", "skill"],
       gate_pass_action: ["check_in", "check_out"],
-      user_role: ["super_admin", "centre_admin", "coach", "medical", "parent"],
+      user_role: [
+        "super_admin",
+        "centre_admin",
+        "coach",
+        "medical",
+        "parent",
+        "staff",
+        "finance",
+      ],
     },
   },
 } as const
