@@ -422,40 +422,26 @@ export async function submitSkillScores(
     return { error: "Overall remarks are required." };
   }
 
-  if (resultRows.length > 0) {
-    const { error: resultsError } = await supabase
-      .from("five_s_results")
-      .upsert(resultRows, { onConflict: "player_id,test_id" });
-
-    if (resultsError) {
-      logError(`Failed to save skill ratings for player ${playerId}:`, resultsError);
-      return { error: "Failed to save ratings." };
-    }
-  }
-
-  const { error: groupNotesError } = await supabase
-    .from("five_s_group_notes")
-    .upsert(groupNoteRows, { onConflict: "player_id,category,group_name" });
-
-  if (groupNotesError) {
-    logError(`Failed to save skill group remarks for player ${playerId}:`, groupNotesError);
-    return { error: "Failed to save test group remarks." };
-  }
-
-  const { error: notesError } = await supabase.from("five_s_category_notes").upsert(
-    {
+  // Results, group remarks, and the overall category note used to be three
+  // separate .upsert() calls — a failure on the second or third left the
+  // first already committed, with nothing to undo it. submit_skill_scores
+  // does all three in one Postgres function call, so a failure on any of
+  // them rolls back the whole submission instead of leaving it half-saved.
+  const { error } = await supabase.rpc("submit_skill_scores", {
+    p_results: resultRows,
+    p_group_notes: groupNoteRows,
+    p_category_note: {
       player_id: playerId,
       category: "skill",
       centre_id: batch.centre_id,
       remarks: overallRemarks,
       recorded_by: coach.id,
     },
-    { onConflict: "player_id,category" }
-  );
+  });
 
-  if (notesError) {
-    logError(`Failed to save skill overall remarks for player ${playerId}:`, notesError);
-    return { error: "Failed to save overall remarks." };
+  if (error) {
+    logError(`Failed to save skill assessment for player ${playerId}:`, error);
+    return { error: "Failed to save skill assessment." };
   }
 
   revalidatePath(`/coach/5s-model/${batchId}/${playerId}`);

@@ -12,7 +12,7 @@ import {
   ClipboardCheck,
   HeartPulse,
   Sparkles,
-  Baby,
+  User,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -73,7 +73,7 @@ export const PARENT_NAV: NavGroup[] = [
   { items: [{ href: "/parent", label: "Dashboard", icon: LayoutDashboard }] },
   {
     label: "Family",
-    items: [{ href: "/parent/player", label: "Player", icon: Baby }],
+    items: [{ href: "/parent/player", label: "Player", icon: User }],
   },
 ];
 

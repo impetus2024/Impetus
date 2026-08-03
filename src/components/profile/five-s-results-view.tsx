@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
+import { computeFiveSScores } from "@/lib/five-s/scores";
 import { FiveSPlaceholder } from "@/components/profile/five-s-placeholder";
 import { FiveSRadarSection, FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 import { FIVE_S_CATEGORY_META } from "@/lib/five-s/categories";
@@ -87,42 +88,17 @@ export async function FiveSResultsView({
   const categories = [...new Set(tests.map((t) => t.category))];
   const questionCategories = [...new Set(questions.map((q) => q.category))];
 
-  // Radar score per category (0-5) is completion-based — % of that
-  // category's required tests/questions that have a recorded value — not a
-  // performance benchmark, since raw test units (sec, cm, reps) have no
-  // defined good/bad range yet. "Previous" per category only counts tests
-  // that have actually been rescored (previous_score set by the DB
-  // trigger); the Previous chart itself only renders once that's true
-  // somewhere, since a single assessment has nothing to compare against.
-  const currentScores: Record<string, number> = {};
-  const previousScores: Record<string, number> = {};
-  let hasPrevious = false;
-
-  for (const axis of FIVE_S_RADAR_AXES) {
-    const categoryTests = tests.filter((t) => t.category === axis.key && t.is_required);
-    if (categoryTests.length > 0) {
-      let currentCount = 0;
-      let previousCount = 0;
-      for (const test of categoryTests) {
-        const result = resultByTest.get(test.id);
-        if (result) currentCount++;
-        if (result?.previous_score != null) {
-          previousCount++;
-          hasPrevious = true;
-        }
-      }
-      currentScores[axis.key] = (currentCount / categoryTests.length) * 5;
-      previousScores[axis.key] = (previousCount / categoryTests.length) * 5;
-      continue;
-    }
-
-    const categoryQuestions = questions.filter((q) => q.category === axis.key);
-    if (categoryQuestions.length > 0) {
-      const answeredCount = categoryQuestions.filter((q) => responseByQuestion.has(q.id)).length;
-      currentScores[axis.key] = (answeredCount / categoryQuestions.length) * 5;
-      previousScores[axis.key] = 0;
-    }
-  }
+  const {
+    current: currentScores,
+    previous: previousScores,
+    hasPrevious,
+  } = computeFiveSScores(
+    FIVE_S_RADAR_AXES.map((a) => a.key),
+    tests,
+    questions,
+    resultByTest,
+    responseByQuestion
+  );
 
   return (
     <div className="space-y-8">

@@ -29,16 +29,18 @@ export function RadarChart({
   data,
   max = 5,
   color = "var(--color-chart-3)",
+  className = "mx-auto w-full max-w-[300px]",
 }: {
   data: RadarDatum[];
   max?: number;
   color?: string;
+  className?: string;
 }) {
   if (data.length < 3) return null;
   const radiusForValue = (v: number) => (Math.max(0, v) / max) * RADIUS;
 
   return (
-    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="mx-auto w-full max-w-[300px]" role="img" aria-label="Radar chart">
+    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className={className} role="img" aria-label="Radar chart">
       {GRID_LEVELS.map((level) => (
         <polygon
           key={level}

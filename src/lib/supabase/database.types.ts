@@ -1196,6 +1196,10 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: undefined
       }
+      submit_skill_scores: {
+        Args: { p_category_note: Json; p_group_notes: Json; p_results: Json }
+        Returns: undefined
+      }
       toggle_gate_pass: {
         Args: {
           p_centre_id: string

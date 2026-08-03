@@ -312,8 +312,10 @@ export async function createPlayer(
     });
   } catch (err) {
     // Parent account/link failed (e.g. email not configured yet) — the
-    // player record itself is saved; the link can be retried by editing
-    // the player, or by adding the parent account manually.
+    // player record itself is saved regardless. updateParentProfile
+    // re-attempts this same resolve-and-link step (idempotently) on every
+    // save of the Parent Profile tab, so saving that tab once is the actual
+    // recovery path — not just editing player fields in general.
     logError(`Failed to link parent for player ${player.id} (${d.parentEmail}):`, err);
   }
 
@@ -606,15 +608,40 @@ export async function updateParentProfile(
   };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: player, error } = await supabase
     .from("players")
     .update(update)
     .eq("id", id)
-    .eq("centre_id", centreAdmin.centre_id!);
+    .eq("centre_id", centreAdmin.centre_id!)
+    .select("parent_email")
+    .maybeSingle();
 
   if (error) {
     logError(`Failed to save parent profile for player ${id}:`, error);
     return { error: "Failed to save parent profile." };
+  }
+
+  // Heals a parent_player_links row that createPlayer's own parent
+  // provisioning step (see its comment) failed to create — this is the
+  // "retried by editing the player" path that comment refers to; without
+  // this, that was never actually implemented anywhere, and a failed link
+  // had no recovery path at all. Idempotent: parent_player_links' primary
+  // key is (parent_id, player_id), so re-running this when the link
+  // already exists is a harmless no-op.
+  if (player?.parent_email) {
+    try {
+      const parentProfileId = await resolveParentProfileId(
+        player.parent_email,
+        d.fatherName || d.motherName || "Parent"
+      );
+      const admin = createAdminClient();
+      await admin.from("parent_player_links").upsert(
+        { parent_id: parentProfileId, player_id: id, centre_id: centreAdmin.centre_id! },
+        { onConflict: "parent_id,player_id" }
+      );
+    } catch (err) {
+      logError(`Failed to (re)link parent for player ${id}:`, err);
+    }
   }
 
   revalidatePath(PATH);

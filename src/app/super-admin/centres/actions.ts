@@ -9,6 +9,7 @@ import { uploadFile, deleteFile, UploadValidationError } from "@/lib/storage/r2"
 import { provisionUser, ProvisionUserError } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
 import { logError } from "@/lib/logger";
+import type { Database } from "@/lib/supabase/database.types";
 
 const CentreSchema = z.object({
   name: z.string().min(1, { error: "Centre name is required." }),
@@ -225,6 +226,52 @@ const DeleteCentreSchema = z.object({
   confirmName: z.string().min(1, { error: "Type the centre name to confirm." }),
 });
 
+// Every table a staff profile can be referenced from via an `on delete
+// restrict` FK (20260727125052_core_schema.sql and the five_s_* migrations)
+// — anyone who's ever created a player, recorded a payment, marked
+// attendance, coached a batch, performed a gate-pass action, reported an
+// injury, or recorded/published a 5S result can't have their auth account
+// deleted while that row still exists, because deleting it would cascade
+// into deleting their `profiles` row, which those FKs block. Checked
+// up front, before any deletion is attempted, so deleteCentre can refuse
+// the whole operation instead of discovering this mid-loop — Postgres has
+// no equivalent of a dry-run for a REST call like auth.admin.deleteUser, so
+// this is the only way to know in advance.
+type StaffReferencingTable = keyof Database["public"]["Tables"];
+
+const STAFF_REFERENCING_TABLES: { table: StaffReferencingTable; column: string }[] = [
+  { table: "players", column: "created_by" },
+  { table: "payments", column: "recorded_by" },
+  { table: "attendance", column: "marked_by" },
+  { table: "batches", column: "head_coach_id" },
+  { table: "gate_pass_logs", column: "performed_by" },
+  { table: "injuries", column: "reported_by" },
+  { table: "five_s_results", column: "recorded_by" },
+  { table: "five_s_question_responses", column: "recorded_by" },
+  { table: "five_s_category_notes", column: "recorded_by" },
+  { table: "five_s_group_notes", column: "recorded_by" },
+  { table: "five_s_reports", column: "published_by" },
+];
+
+async function findStaffWithHistoricalRecords(
+  admin: ReturnType<typeof createAdminClient>,
+  staffIds: string[]
+): Promise<Set<string>> {
+  const blocked = new Set<string>();
+  if (staffIds.length === 0) return blocked;
+
+  await Promise.all(
+    STAFF_REFERENCING_TABLES.map(async ({ table, column }) => {
+      const { data } = await admin.from(table).select(column).in(column, staffIds);
+      for (const row of (data ?? []) as unknown as Record<string, string>[]) {
+        blocked.add(row[column]);
+      }
+    })
+  );
+
+  return blocked;
+}
+
 // Every centre-scoped table (batches, players, payments, attendance,
 // five_s_* results, etc.) is `on delete cascade` from `centres` — see the
 // "Cascade delete blast radius" section in docs/BACKUP_RECOVERY.md. The one
@@ -232,6 +279,16 @@ const DeleteCentreSchema = z.object({
 // (20260727125052_core_schema.sql:57), so this centre's staff accounts have
 // to be deleted first via the admin API — that also cascades staff_profiles
 // — or the centres delete below fails on the FK.
+//
+// All-or-nothing: findStaffWithHistoricalRecords runs first and refuses the
+// entire operation if ANY staff member can't be safely removed, so the loop
+// below never starts unless every account in it is expected to succeed. This
+// replaces an earlier version that deleted staff one at a time with no
+// pre-check — a restrict-FK failure partway through left already-deleted
+// accounts gone for good while still reporting "nothing was deleted" to the
+// admin. auth.admin.deleteUser is a GoTrue REST call, not a SQL statement, so
+// it can't be wrapped in a Postgres transaction with the rest of this
+// function — prevention up front is the only real safeguard available here.
 export async function deleteCentre(
   centreId: string,
   _prev: CentreFormState,
@@ -265,15 +322,43 @@ export async function deleteCentre(
 
   const { data: staff } = await admin
     .from("profiles")
-    .select("id")
+    .select("id, full_name")
     .eq("centre_id", centreId);
 
+  const blockedIds = await findStaffWithHistoricalRecords(
+    admin,
+    (staff ?? []).map((s) => s.id)
+  );
+
+  if (blockedIds.size > 0) {
+    const blockedNames = (staff ?? [])
+      .filter((s) => blockedIds.has(s.id))
+      .map((s) => s.full_name)
+      .join(", ");
+    return {
+      error: `Can't delete this centre — ${blockedNames} have historical records (players, payments, attendance, 5S results, etc.) that must stay linked to their account. Nothing was deleted.`,
+    };
+  }
+
+  const deletedSoFar: string[] = [];
   for (const member of staff ?? []) {
     const { error } = await admin.auth.admin.deleteUser(member.id);
     if (error) {
       logError(`Failed to delete staff account ${member.id} for centre ${centreId}:`, error);
-      return { error: "Failed to remove this centre's staff accounts — nothing was deleted." };
+      // Should be unreachable now that findStaffWithHistoricalRecords has
+      // already ruled out every known blocker above — if it still happens
+      // (a genuine transient GoTrue failure, or a new row created in the
+      // brief window between the check and this loop), report exactly what
+      // was actually removed rather than repeating the old blanket "nothing
+      // was deleted" claim, which was frequently false.
+      return {
+        error:
+          deletedSoFar.length > 0
+            ? `Stopped partway through: ${deletedSoFar.join(", ")} were already removed, but "${member.full_name}" failed and the centre was NOT deleted. Contact support before retrying — do not attempt this again until the failure is understood.`
+            : "Failed to remove this centre's staff accounts — nothing was deleted.",
+      };
     }
+    deletedSoFar.push(member.full_name);
   }
 
   const { error } = await admin.from("centres").delete().eq("id", centreId);

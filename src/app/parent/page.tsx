@@ -3,18 +3,23 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/dal";
 import { getParentChildren } from "@/lib/parent/children";
+import { getFiveSCurrentScores } from "@/lib/five-s/scores";
 import { StatCard } from "@/components/stat-card";
 import { DashboardGreeting } from "@/components/dashboard-greeting";
 import { InsightBanner } from "@/components/insight-banner";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { AttendanceCalendar } from "@/components/profile/attendance-calendar";
+import { FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
+import { FiveSPerformanceOverview } from "@/components/profile/five-s-performance-overview";
 import { ChildSelect } from "./child-select";
 
 export default async function ParentDashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ playerId?: string }>;
+  searchParams: Promise<{ playerId?: string; month?: string }>;
 }) {
   const parent = await requireRole("parent");
-  const { playerId } = await searchParams;
+  const { playerId, month } = await searchParams;
 
   const children = await getParentChildren(parent.id);
   const selectedId = playerId || children[0]?.id;
@@ -33,10 +38,41 @@ export default async function ParentDashboard({
           message="Once your centre adds your child as a player, they'll appear here automatically."
         />
       ) : selectedId ? (
-        <ChildMetrics playerId={selectedId} />
+        <>
+          <ChildMetrics playerId={selectedId} />
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+            <Card className="flex flex-col rounded-2xl border-border/70 shadow-card">
+              <CardHeader>
+                <CardTitle>Attendance</CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1">
+                <AttendanceCalendar
+                  playerId={selectedId}
+                  month={month}
+                  basePath={`/parent?playerId=${selectedId}`}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-border/70 shadow-card">
+              <CardContent>
+                <FiveSDashboardCard playerId={selectedId} />
+              </CardContent>
+            </Card>
+          </div>
+        </>
       ) : null}
     </div>
   );
+}
+
+async function FiveSDashboardCard({ playerId }: { playerId: string }) {
+  const scores = await getFiveSCurrentScores(
+    playerId,
+    FIVE_S_RADAR_AXES.map((a) => a.key)
+  );
+
+  return <FiveSPerformanceOverview scores={scores} />;
 }
 
 async function ChildMetrics({ playerId }: { playerId: string }) {
