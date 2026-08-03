@@ -25,8 +25,12 @@ export const verifySession = cache(async () => {
     .eq("id", userId)
     .single();
 
-  if (error || !profile || !profile.is_active) {
+  if (error || !profile) {
     redirect("/login");
+  }
+
+  if (!profile.is_active) {
+    redirect("/login?disabled=1");
   }
 
   return profile;

@@ -116,6 +116,7 @@ export default async function AdministratorsPage({
                 <AdministratorRowActions
                   profileId={a.id}
                   isActive={a.is_active}
+                  isSelf={a.id === centreAdmin.id}
                 />
               </TableCell>
             </TableRow>

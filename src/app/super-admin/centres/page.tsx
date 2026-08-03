@@ -4,6 +4,8 @@ import { getPublicFileUrl } from "@/lib/storage/r2";
 import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -18,33 +20,42 @@ import { AddCentreDialog } from "./add-centre-dialog";
 import { EditCentreDialog } from "./edit-centre-dialog";
 import { InviteAdminDialog } from "./invite-admin-dialog";
 import { CentreStatusToggle } from "./centre-status-toggle";
+import { DeleteCentreDialog } from "./delete-centre-dialog";
+import { CentreAdminsDialog } from "./centre-admins-dialog";
 
 export default async function CentresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
-  const { q, status } = await searchParams;
+  const { q, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
   let centresQuery = supabase
     .from("centres")
-    .select("id, name, contact_number, email, country, logo_path, is_active");
+    .select("id, name, contact_number, email, country, logo_path, is_active", { count: "exact" });
 
   if (q) centresQuery = centresQuery.ilike("name", `%${q}%`);
   if (status === "active") centresQuery = centresQuery.eq("is_active", true);
   if (status === "inactive") centresQuery = centresQuery.eq("is_active", false);
 
-  const [{ data: centres }, { data: admins }] = await Promise.all([
-    centresQuery.order("created_at", { ascending: false }),
+  const [{ data: centres, count }, { data: admins }] = await Promise.all([
+    centresQuery.order("created_at", { ascending: false }).range(from, to),
     supabase
       .from("profiles")
-      .select("centre_id")
-      .eq("role", "centre_admin")
-      .eq("is_active", true),
+      .select("id, full_name, email, centre_id, is_active")
+      .eq("role", "centre_admin"),
   ]);
 
-  const centresWithAdmin = new Set((admins ?? []).map((a) => a.centre_id));
+  const adminsByCentre = new Map<string, NonNullable<typeof admins>>();
+  for (const admin of admins ?? []) {
+    if (!admin.centre_id) continue;
+    const list = adminsByCentre.get(admin.centre_id) ?? [];
+    list.push(admin);
+    adminsByCentre.set(admin.centre_id, list);
+  }
   const canShowLogos = Boolean(process.env.R2_PUBLIC_URL);
   const hasFilters = Boolean(q || status);
 
@@ -102,15 +113,18 @@ export default async function CentresPage({
                 </Badge>
               </TableCell>
               <TableCell>
-                <Badge variant={centresWithAdmin.has(centre.id) ? "default" : "destructive"}>
-                  {centresWithAdmin.has(centre.id) ? "Assigned" : "None"}
-                </Badge>
+                <CentreAdminsDialog
+                  centreId={centre.id}
+                  centreName={centre.name}
+                  admins={adminsByCentre.get(centre.id) ?? []}
+                />
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
                   <EditCentreDialog centre={centre} />
                   <InviteAdminDialog centreId={centre.id} centreName={centre.name} />
                   <CentreStatusToggle centreId={centre.id} isActive={centre.is_active} />
+                  <DeleteCentreDialog centre={centre} />
                 </div>
               </TableCell>
             </TableRow>
@@ -128,6 +142,8 @@ export default async function CentresPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }

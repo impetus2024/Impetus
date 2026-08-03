@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { roleHome, type UserRole } from "@/lib/auth/dal";
 import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
 import { safeNextPath } from "@/lib/url";
+import { ACCOUNT_DISABLED_MESSAGE } from "./constants";
 
 const LoginSchema = z.object({
   email: z.email({ error: "Enter a valid email." }),
@@ -52,7 +53,7 @@ export async function login(
 
   if (!profile || !profile.is_active) {
     await supabase.auth.signOut();
-    return { error: "This account is disabled. Contact your centre admin." };
+    return { error: ACCOUNT_DISABLED_MESSAGE };
   }
 
   const next = safeNextPath(formData.get("next"));

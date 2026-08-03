@@ -4,6 +4,7 @@ import * as z from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadFile, deleteFile, UploadValidationError } from "@/lib/storage/r2";
 import { provisionUser, ProvisionUserError } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
@@ -218,6 +219,115 @@ export async function setCentreActive(centreId: string, active: boolean) {
   }
 
   revalidatePath("/super-admin/centres");
+}
+
+const DeleteCentreSchema = z.object({
+  confirmName: z.string().min(1, { error: "Type the centre name to confirm." }),
+});
+
+// Every centre-scoped table (batches, players, payments, attendance,
+// five_s_* results, etc.) is `on delete cascade` from `centres` — see the
+// "Cascade delete blast radius" section in docs/BACKUP_RECOVERY.md. The one
+// exception is `profiles.centre_id`, which is `on delete restrict`
+// (20260727125052_core_schema.sql:57), so this centre's staff accounts have
+// to be deleted first via the admin API — that also cascades staff_profiles
+// — or the centres delete below fails on the FK.
+export async function deleteCentre(
+  centreId: string,
+  _prev: CentreFormState,
+  formData: FormData
+): Promise<CentreFormState> {
+  await requireRole("super_admin");
+
+  const parsed = DeleteCentreSchema.safeParse({
+    confirmName: formData.get("confirmName"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const admin = createAdminClient();
+
+  const { data: centre } = await admin
+    .from("centres")
+    .select("id, name, logo_path")
+    .eq("id", centreId)
+    .maybeSingle();
+
+  if (!centre) {
+    return { error: "Centre not found." };
+  }
+
+  if (parsed.data.confirmName !== centre.name) {
+    return { error: "Centre name doesn't match. Type it exactly to confirm." };
+  }
+
+  const { data: staff } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("centre_id", centreId);
+
+  for (const member of staff ?? []) {
+    const { error } = await admin.auth.admin.deleteUser(member.id);
+    if (error) {
+      logError(`Failed to delete staff account ${member.id} for centre ${centreId}:`, error);
+      return { error: "Failed to remove this centre's staff accounts — nothing was deleted." };
+    }
+  }
+
+  const { error } = await admin.from("centres").delete().eq("id", centreId);
+
+  if (error) {
+    logError(`Failed to delete centre ${centreId}:`, error);
+    return { error: "Failed to delete centre." };
+  }
+
+  if (centre.logo_path) {
+    deleteFile(centre.logo_path).catch((err) =>
+      logError(`Failed to delete logo for deleted centre ${centreId}:`, err)
+    );
+  }
+
+  revalidatePath("/super-admin/centres");
+  return undefined;
+}
+
+export type DeleteAdminState = { error?: string } | undefined;
+
+// Hard-deletes the auth account, same as deleteCentre's staff cleanup above
+// (profiles/staff_profiles cascade from auth.users on delete) — scoped to
+// role = 'centre_admin' and this specific centreId so the action can't be
+// pointed at a coach/medical profile or another centre's admin.
+export async function deleteCentreAdmin(
+  centreId: string,
+  adminId: string
+): Promise<DeleteAdminState> {
+  await requireRole("super_admin");
+
+  const admin = createAdminClient();
+
+  const { data: target } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("id", adminId)
+    .eq("centre_id", centreId)
+    .eq("role", "centre_admin")
+    .maybeSingle();
+
+  if (!target) {
+    return { error: "Administrator not found." };
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(adminId);
+
+  if (error) {
+    logError(`Failed to delete centre admin ${adminId} for centre ${centreId}:`, error);
+    return { error: "Failed to remove administrator." };
+  }
+
+  revalidatePath("/super-admin/centres");
+  return undefined;
 }
 
 export async function inviteCentreAdmin(

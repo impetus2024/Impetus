@@ -1176,6 +1176,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      payments_by_month: {
+        Args: { p_centre_id: string; p_since: string }
+        Returns: {
+          month: string
+          total: number
+        }[]
+      }
       revoke_user_sessions: {
         Args: { target_user_id: string }
         Returns: undefined
