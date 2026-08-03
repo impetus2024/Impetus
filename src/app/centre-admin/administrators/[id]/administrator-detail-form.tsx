@@ -14,12 +14,14 @@ export function AdministratorDetailForm({
   profileId,
   fullName,
   isActive,
+  isSelf,
   staffProfile,
   documentUrls,
 }: {
   profileId: string;
   fullName: string;
   isActive: boolean;
+  isSelf: boolean;
   staffProfile: StaffProfile | null;
   documentUrls: Record<string, string>;
 }) {
@@ -33,16 +35,18 @@ export function AdministratorDetailForm({
         <Badge variant={isActive ? "default" : "secondary"}>
           {isActive ? "Enabled" : "Disabled"}
         </Badge>
-        <Button
-          variant={isActive ? "destructive" : "default"}
-          size="sm"
-          disabled={togglePending}
-          onClick={() =>
-            startToggle(() => setAdministratorActive(profileId, !isActive))
-          }
-        >
-          {isActive ? "Disable" : "Enable"}
-        </Button>
+        {!isSelf && (
+          <Button
+            variant={isActive ? "destructive" : "default"}
+            size="sm"
+            disabled={togglePending}
+            onClick={() =>
+              startToggle(() => setAdministratorActive(profileId, !isActive))
+            }
+          >
+            {isActive ? "Disable" : "Enable"}
+          </Button>
+        )}
       </div>
 
       <form action={action}>

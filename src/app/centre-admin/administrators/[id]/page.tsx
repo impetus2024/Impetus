@@ -56,6 +56,7 @@ export default async function AdministratorDetailPage({
         profileId={profile.id}
         fullName={profile.full_name}
         isActive={profile.is_active}
+        isSelf={profile.id === centreAdmin.id}
         staffProfile={staffProfile}
         documentUrls={documentUrls}
       />

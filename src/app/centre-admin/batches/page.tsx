@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -27,16 +29,20 @@ export default async function BatchesPage({
     playerTypeId?: string;
     ageCategoryId?: string;
     status?: string;
+    page?: string;
   }>;
 }) {
   const centreAdmin = await requireRole("centre_admin");
-  const { q, headCoachId, playerTypeId, ageCategoryId, status } = await searchParams;
+  const { q, headCoachId, playerTypeId, ageCategoryId, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
   let query = supabase
     .from("batches")
     .select(
-      "id, name, head_coach_id, player_type_id, age_category_id, start_time, end_time, is_active, profiles!batches_head_coach_id_fkey(full_name), player_types(name), age_categories(name)"
+      "id, name, head_coach_id, player_type_id, age_category_id, start_time, end_time, is_active, profiles!batches_head_coach_id_fkey(full_name), player_types(name), age_categories(name)",
+      { count: "exact" }
     )
     .eq("centre_id", centreAdmin.centre_id!);
 
@@ -47,9 +53,9 @@ export default async function BatchesPage({
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
 
-  const [{ data: batches }, { data: coachProfiles }, { data: playerTypes }, { data: ageCategories }] =
+  const [{ data: batches, count }, { data: coachProfiles }, { data: playerTypes }, { data: ageCategories }] =
     await Promise.all([
-      query.order("name"),
+      query.order("name").range(from, to),
       supabase
         .from("profiles")
         .select("id, full_name")
@@ -157,6 +163,8 @@ export default async function BatchesPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }

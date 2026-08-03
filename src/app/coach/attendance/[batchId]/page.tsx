@@ -31,40 +31,47 @@ export default async function CoachBatchAttendancePage({
   const coach = await requireRole("coach");
   const supabase = await createClient();
 
-  const { data: batch } = await supabase
-    .from("batches")
-    .select("id, name")
-    .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
-    .maybeSingle();
+  // batch/players/existing/recentDates only depend on batchId + selectedDate
+  // (both already known from params/searchParams) — not on each other's
+  // results — so they run as one round trip instead of four sequential
+  // ones. Only last5Records genuinely depends on recentDates and stays
+  // after. The authorization check (`if (!batch) notFound()`) still runs
+  // before anything renders; on the rare unauthorized-batchId request the
+  // other three just fetch data that gets discarded.
+  const [{ data: batch }, { data: players }, { data: existing }, { data: recentDates }] =
+    await Promise.all([
+      supabase
+        .from("batches")
+        .select("id, name")
+        .eq("id", batchId)
+        .eq("head_coach_id", coach.id)
+        .maybeSingle(),
+      supabase
+        .from("players")
+        .select("id, name")
+        .eq("batch_id", batchId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("attendance")
+        .select("player_id, status")
+        .eq("batch_id", batchId)
+        .eq("attendance_date", selectedDate),
+      supabase
+        .from("attendance")
+        .select("attendance_date")
+        .eq("batch_id", batchId)
+        .order("attendance_date", { ascending: false })
+        .limit(200),
+    ]);
 
   if (!batch) notFound();
 
-  const { data: players } = await supabase
-    .from("players")
-    .select("id, name")
-    .eq("batch_id", batchId)
-    .eq("is_active", true)
-    .order("name");
-
   const playerList = players ?? [];
-
-  const { data: existing } = await supabase
-    .from("attendance")
-    .select("player_id, status")
-    .eq("batch_id", batchId)
-    .eq("attendance_date", selectedDate);
 
   const defaultStatuses = Object.fromEntries(
     (existing ?? []).map((a) => [a.player_id, a.status])
   ) as Record<string, "present" | "absent">;
-
-  const { data: recentDates } = await supabase
-    .from("attendance")
-    .select("attendance_date")
-    .eq("batch_id", batchId)
-    .order("attendance_date", { ascending: false })
-    .limit(200);
 
   const last5Dates = [...new Set((recentDates ?? []).map((r) => r.attendance_date))].slice(0, 5);
 

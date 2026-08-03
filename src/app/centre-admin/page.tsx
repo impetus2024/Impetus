@@ -19,11 +19,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { getLastNMonths, monthKeyOf } from "@/lib/months";
 
-function monthStartISO() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
-
 const QUICK_ACTIONS = [
   { href: "/centre-admin/players/new", label: "Add Player", icon: UserPlus },
   { href: "/centre-admin/batches", label: "Add Batch", icon: CalendarPlus },
@@ -38,7 +33,7 @@ export default async function CentreAdminDashboard() {
 
   const months = getLastNMonths(6);
 
-  const [centre, players, batches, staff, checkedIn, payments, recentGatePass] =
+  const [centre, players, batches, staff, checkedIn, paymentsByMonthRows, recentGatePass] =
     await Promise.all([
       supabase.from("centres").select("name").eq("id", centreId).maybeSingle(),
       supabase
@@ -62,11 +57,13 @@ export default async function CentreAdminDashboard() {
         .select("id", { count: "exact", head: true })
         .eq("centre_id", centreId)
         .eq("is_checked_in", true),
-      supabase
-        .from("payments")
-        .select("amount, payment_date")
-        .eq("centre_id", centreId)
-        .gte("payment_date", months[0].start.toISOString().slice(0, 10)),
+      // Grouped in SQL (see payments_by_month's migration) instead of
+      // pulling every payment row for the window and summing it per month
+      // in JS.
+      supabase.rpc("payments_by_month", {
+        p_centre_id: centreId,
+        p_since: months[0].start.toISOString().slice(0, 10),
+      }),
       supabase
         .from("gate_pass_logs")
         .select("action, reason, created_at, players(name)")
@@ -75,16 +72,17 @@ export default async function CentreAdminDashboard() {
         .limit(5),
     ]);
 
-  const paymentsThisMonth = (payments.data ?? [])
-    .filter((p) => p.payment_date >= monthStartISO())
-    .reduce((sum, p) => sum + p.amount, 0);
+  const totalByMonthKey = new Map(
+    (paymentsByMonthRows.data ?? []).map((row) => [monthKeyOf(row.month), row.total])
+  );
 
   const paymentsByMonth = months.map((m) => ({
     label: m.label,
-    value: (payments.data ?? [])
-      .filter((p) => monthKeyOf(p.payment_date) === m.key)
-      .reduce((sum, p) => sum + p.amount, 0),
+    value: totalByMonthKey.get(m.key) ?? 0,
   }));
+
+  // months' last entry is always the current month (see getLastNMonths).
+  const paymentsThisMonth = paymentsByMonth[paymentsByMonth.length - 1]?.value ?? 0;
 
   const playerCount = players.count ?? 0;
   const batchCount = batches.count ?? 0;

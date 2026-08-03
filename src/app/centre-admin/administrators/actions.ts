@@ -230,6 +230,11 @@ export async function updateAdministrator(
 
 export async function setAdministratorActive(profileId: string, active: boolean) {
   const centreAdmin = await requireRole("centre_admin");
+
+  if (!active && profileId === centreAdmin.id) {
+    throw new Error("You can't disable your own account.");
+  }
+
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -241,6 +246,20 @@ export async function setAdministratorActive(profileId: string, active: boolean)
   if (error) {
     logError(`Failed to ${active ? "enable" : "disable"} administrator ${profileId}:`, error);
     throw error;
+  }
+
+  // Disabling only blocks *new* app requests (see verifySession's is_active
+  // check) — an already-issued access token stays locally valid until it
+  // expires. Revoking server-side closes the rest of that gap the same way
+  // resetUserPassword does: same caveats, see that function's migration.
+  if (!active) {
+    const admin = createAdminClient();
+    const { error: revokeError } = await admin.rpc("revoke_user_sessions", {
+      target_user_id: profileId,
+    });
+    if (revokeError) {
+      logError(`Failed to revoke sessions for disabled administrator ${profileId}:`, revokeError);
+    }
   }
 
   revalidatePath("/centre-admin/administrators");

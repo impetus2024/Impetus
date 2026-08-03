@@ -16,9 +16,11 @@ import { setAdministratorActive, resetAdministratorPassword, type ResetPasswordA
 export function AdministratorRowActions({
   profileId,
   isActive,
+  isSelf,
 }: {
   profileId: string;
   isActive: boolean;
+  isSelf: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [resetPending, startReset] = useTransition();
@@ -40,16 +42,18 @@ export function AdministratorRowActions({
       >
         {resetPending ? "Resetting..." : "Reset Password"}
       </Button>
-      <Button
-        variant={isActive ? "destructive" : "default"}
-        size="sm"
-        disabled={pending}
-        onClick={() =>
-          startTransition(() => setAdministratorActive(profileId, !isActive))
-        }
-      >
-        {isActive ? "Disable" : "Enable"}
-      </Button>
+      {!isSelf && (
+        <Button
+          variant={isActive ? "destructive" : "default"}
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            startTransition(() => setAdministratorActive(profileId, !isActive))
+          }
+        >
+          {isActive ? "Disable" : "Enable"}
+        </Button>
+      )}
 
       <Dialog open={resetResult !== null} onOpenChange={(open) => !open && setResetResult(null)}>
         <DialogContent className="sm:max-w-sm">

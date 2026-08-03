@@ -52,7 +52,15 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (claims && isPublicPath) {
+  // A disabled account's access token stays locally valid until it expires
+  // (see verifySession's comment on getClaims being a stateless check), so
+  // without this carve-out a still-"claims-valid" disabled user would bounce
+  // straight back here from roleHome, which the DAL bounces right back to
+  // /login?disabled=1 — an infinite loop.
+  const isDisabledLoginBounce =
+    pathname.startsWith("/login") && request.nextUrl.searchParams.get("disabled") === "1";
+
+  if (claims && isPublicPath && !isDisabledLoginBounce) {
     // app_metadata is only writable by the service role (see profiles trigger),
     // never trust user_metadata for authorization — it's client-editable.
     const role = claims.app_metadata?.role as UserRole | undefined;

@@ -19,33 +19,60 @@ function sanitizeFilenameForDisplay(name: string): string {
 
 // Shared by every action that accepts a batch of optional document uploads
 // (players, staff, injuries) — validates and uploads each present file,
-// returning early with a user-facing message on the first invalid one
-// (wrong type/too large) instead of silently dropping it. A genuine R2/
-// infra failure doesn't block the record from saving, but is now logged
-// instead of vanishing.
+// surfacing a user-facing message for the first invalid one (wrong
+// type/too large, in field order) instead of silently dropping it. A
+// genuine R2/infra failure doesn't block the record from saving, but is
+// logged instead of vanishing.
+//
+// Files upload concurrently (Promise.allSettled), not one at a time — this
+// is called from the app's highest-traffic write paths (create/update
+// player, update player profile, create administrator), each submitting up
+// to 4 documents at once, and sequential uploads meant paying for the sum
+// of every file's R2 round trip instead of the slowest one. isRateLimited/
+// recordAttempt in uploadFile are synchronous ahead of its first await, so
+// running the calls concurrently still records one attempt per file, in
+// the same order, before any of them actually start transferring — the
+// rate-limit budget isn't affected by the switch.
 export async function uploadDocFields<Column extends string>(
   formData: FormData,
   docFields: DocField<Column>[],
   folder: string,
   actorId?: string
 ): Promise<{ values: Partial<Record<Column, string>>; error?: string }> {
+  const present = docFields
+    .map((field) => ({ ...field, file: formData.get(field.formKey) }))
+    .filter(
+      (field): field is DocField<Column> & { file: File } =>
+        field.file instanceof File && field.file.size > 0
+    );
+
+  const results = await Promise.allSettled(
+    present.map(({ file }) => uploadFile(file, folder, "private", actorId))
+  );
+
   const values: Partial<Record<Column, string>> = {};
+  let validationError: string | undefined;
 
-  for (const { formKey, column } of docFields) {
-    const file = formData.get(formKey);
-    if (!(file instanceof File) || file.size === 0) continue;
+  for (let i = 0; i < present.length; i++) {
+    const { formKey, column, file } = present[i];
+    const result = results[i];
 
-    try {
-      values[column] = await uploadFile(file, folder, "private", actorId);
-    } catch (err) {
-      if (err instanceof UploadValidationError) {
-        return { values, error: `${err.message} (${sanitizeFilenameForDisplay(file.name)})` };
-      }
+    if (result.status === "fulfilled") {
+      values[column] = result.value;
+      continue;
+    }
+
+    const err = result.reason;
+    if (err instanceof UploadValidationError) {
+      // First validation error in field order wins — matches the old
+      // sequential loop's "return on the first invalid one" behavior.
+      validationError ??= `${err.message} (${sanitizeFilenameForDisplay(file.name)})`;
+    } else {
       logError(`Upload failed for "${formKey}" in ${folder}:`, err);
     }
   }
 
-  return { values };
+  return validationError ? { values, error: validationError } : { values };
 }
 
 // Call after a record's doc columns are successfully overwritten with the
