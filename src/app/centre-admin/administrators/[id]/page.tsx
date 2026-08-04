@@ -58,6 +58,7 @@ export default async function AdministratorDetailPage({
       <AdministratorDetailForm
         profileId={profile.id}
         fullName={profile.full_name}
+        role={profile.role}
         isActive={profile.is_active}
         isSelf={profile.id === centreAdmin.id}
         canEdit={canEdit}
