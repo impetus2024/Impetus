@@ -86,7 +86,7 @@ export function AddAdministratorDialog() {
               </Field>
               <Field>
                 <FieldLabel htmlFor="role">Role</FieldLabel>
-                <Select name="role" defaultValue="coach" required>
+                <Select name="role" required>
                   <SelectTrigger id="role" className="w-full">
                     <SelectValue placeholder="Select role">
                       {(value: string) =>

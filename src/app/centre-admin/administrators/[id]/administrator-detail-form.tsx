@@ -8,15 +8,31 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileInput } from "@/components/ui/file-input";
 import { Field, FieldLabel, FieldGroup, FieldDescription, FILLED_INPUT } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AdministratorProfileView } from "@/components/profile/administrator-profile-view";
 import { updateAdministrator, setAdministratorActive } from "../actions";
 import type { Database } from "@/lib/supabase/database.types";
 
 type StaffProfile = Database["public"]["Tables"]["staff_profiles"]["Row"];
 
+const ROLE_LABEL: Record<string, string> = {
+  centre_admin: "Centre Admin",
+  coach: "Coach",
+  medical: "Medical",
+  staff: "Staff",
+  finance: "Finance",
+};
+
 export function AdministratorDetailForm({
   profileId,
   fullName,
+  role,
   isActive,
   isSelf,
   canEdit,
@@ -25,6 +41,7 @@ export function AdministratorDetailForm({
 }: {
   profileId: string;
   fullName: string;
+  role: string;
   isActive: boolean;
   isSelf: boolean;
   canEdit: boolean;
@@ -116,6 +133,31 @@ export function AdministratorDetailForm({
             <Field>
               <FieldLabel htmlFor="name">Name</FieldLabel>
               <Input id="name" name="name" defaultValue={fullName} className={FILLED_INPUT} required />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="role">Role</FieldLabel>
+              {isSelf ? (
+                <>
+                  <Input value={ROLE_LABEL[role] ?? role} className={FILLED_INPUT} disabled />
+                  <input type="hidden" name="role" value={role} />
+                  <FieldDescription>You can&apos;t change your own role.</FieldDescription>
+                </>
+              ) : (
+                <Select name="role" defaultValue={role} required>
+                  <SelectTrigger id="role" className="w-full">
+                    <SelectValue placeholder="Select role">
+                      {(value: string) => ROLE_LABEL[value] ?? value}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="centre_admin">Centre Admin</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                    <SelectItem value="medical">Medical</SelectItem>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </Field>
             <Field>
               <FieldLabel htmlFor="dateOfBirth">Date of Birth</FieldLabel>

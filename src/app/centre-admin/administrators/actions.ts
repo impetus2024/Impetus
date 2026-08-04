@@ -148,6 +148,7 @@ export async function createAdministrator(
 
 const UpdateAdministratorSchema = z.object({
   name: z.string().min(1, { error: "Name is required." }),
+  role: StaffRole,
   contactNumber: z.string().min(1, { error: "Contact number is required." }),
   dateOfBirth: z.string().optional(),
   addressLine1: z.string().optional(),
@@ -161,9 +162,11 @@ const UpdateAdministratorSchema = z.object({
 
 export type UpdateAdministratorState = { error?: string } | undefined;
 
-// Email and role are intentionally not editable here: email is the login
-// identifier and role drives RLS scope — changing either is a re-provision,
-// not an edit.
+// Email is intentionally not editable here: it's the login identifier,
+// changing it is a re-provision, not an edit. Role is editable (relaxed by
+// the 20260804000000 migration, which still keeps centre_admin from moving
+// anyone to/from super_admin or across centres) but locked out for the
+// caller's own row below to avoid a centre_admin locking themselves out.
 export async function updateAdministrator(
   profileId: string,
   _prev: UpdateAdministratorState,
@@ -173,6 +176,7 @@ export async function updateAdministrator(
 
   const parsed = UpdateAdministratorSchema.safeParse({
     name: formData.get("name"),
+    role: formData.get("role"),
     contactNumber: formData.get("contactNumber"),
     dateOfBirth: emptyToUndefined(formData.get("dateOfBirth")),
     addressLine1: emptyToUndefined(formData.get("addressLine1")),
@@ -192,7 +196,7 @@ export async function updateAdministrator(
 
   const { data: target } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, role")
     .eq("id", profileId)
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();
@@ -201,13 +205,17 @@ export async function updateAdministrator(
     return { error: "Administrator not found." };
   }
 
-  const { error: nameError } = await supabase
+  if (profileId === centreAdmin.id && parsed.data.role !== target.role) {
+    return { error: "You can't change your own role." };
+  }
+
+  const { error: profileError } = await supabase
     .from("profiles")
-    .update({ full_name: parsed.data.name })
+    .update({ full_name: parsed.data.name, role: parsed.data.role })
     .eq("id", profileId);
 
-  if (nameError) {
-    logError(`Failed to save name for administrator ${profileId}:`, nameError);
+  if (profileError) {
+    logError(`Failed to save profile for administrator ${profileId}:`, profileError);
     return { error: "Failed to save changes." };
   }
 
