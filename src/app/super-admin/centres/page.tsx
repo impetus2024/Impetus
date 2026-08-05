@@ -102,7 +102,10 @@ export default async function CentresPage({
                     {centre.name.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                {centre.name}
+                <div>
+                  <div>{centre.name}</div>
+                  <div className="text-xs text-muted-foreground">{centre.id}</div>
+                </div>
               </TableCell>
               <TableCell>{centre.contact_number}</TableCell>
               <TableCell>{centre.email}</TableCell>

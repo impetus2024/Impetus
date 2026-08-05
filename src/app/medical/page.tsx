@@ -2,10 +2,11 @@ import { Users, HeartPulse, Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { StatCard } from "@/components/stat-card";
-import { DashboardGreeting } from "@/components/dashboard-greeting";
 import { InsightBanner } from "@/components/insight-banner";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { MonthlyHighlightsFeed } from "@/components/monthly-highlights/monthly-highlights-feed";
+import { NewsEventsFeed } from "@/components/news-events/news-events-feed";
 import { getLastNMonths, monthKeyOf } from "@/lib/months";
 
 function daysAgoISO(days: number) {
@@ -51,8 +52,6 @@ export default async function MedicalDashboard() {
 
   return (
     <div className="space-y-6">
-      <DashboardGreeting name={medical.full_name || "there"} />
-
       {recentCount > 0 ? (
         <InsightBanner
           tone="warning"
@@ -79,6 +78,11 @@ export default async function MedicalDashboard() {
           <SimpleBarChart data={injuriesByMonth} />
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <NewsEventsFeed />
+        <MonthlyHighlightsFeed />
+      </div>
     </div>
   );
 }

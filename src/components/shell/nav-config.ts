@@ -13,6 +13,9 @@ import {
   HeartPulse,
   Sparkles,
   User,
+  Mail,
+  Megaphone,
+  Newspaper,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
@@ -23,6 +26,17 @@ export const SUPER_ADMIN_NAV: NavGroup[] = [
   {
     label: "Management",
     items: [{ href: "/super-admin/centres", label: "Centre Management", icon: Building2 }],
+  },
+  {
+    label: "Content",
+    items: [
+      { href: "/super-admin/monthly-highlights", label: "Monthly Highlights", icon: Megaphone },
+      { href: "/super-admin/news-events", label: "News & Events", icon: Newspaper },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [{ href: "/super-admin/email-analytics", label: "Email Analytics", icon: Mail }],
   },
 ];
 
@@ -46,6 +60,17 @@ export const CENTRE_ADMIN_NAV: NavGroup[] = [
       { href: "/centre-admin/packages", label: "Package Management", icon: Package2 },
     ],
   },
+  {
+    label: "Content",
+    items: [
+      { href: "/centre-admin/monthly-highlights", label: "Monthly Highlights", icon: Megaphone },
+      { href: "/centre-admin/news-events", label: "News & Events", icon: Newspaper },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [{ href: "/centre-admin/email-analytics", label: "Email Analytics", icon: Mail }],
+  },
 ];
 
 export const COACH_NAV: NavGroup[] = [
@@ -59,6 +84,13 @@ export const COACH_NAV: NavGroup[] = [
       { href: "/coach/5s-model", label: "5S Model", icon: Sparkles },
     ],
   },
+  {
+    label: "Content",
+    items: [
+      { href: "/coach/monthly-highlights", label: "Monthly Highlights", icon: Megaphone },
+      { href: "/coach/news-events", label: "News & Events", icon: Newspaper },
+    ],
+  },
 ];
 
 export const MEDICAL_NAV: NavGroup[] = [
@@ -67,6 +99,13 @@ export const MEDICAL_NAV: NavGroup[] = [
     label: "Medical",
     items: [{ href: "/medical/injuries", label: "Injuries", icon: HeartPulse }],
   },
+  {
+    label: "Content",
+    items: [
+      { href: "/medical/monthly-highlights", label: "Monthly Highlights", icon: Megaphone },
+      { href: "/medical/news-events", label: "News & Events", icon: Newspaper },
+    ],
+  },
 ];
 
 export const PARENT_NAV: NavGroup[] = [
@@ -74,6 +113,13 @@ export const PARENT_NAV: NavGroup[] = [
   {
     label: "Family",
     items: [{ href: "/parent/player", label: "Player", icon: User }],
+  },
+  {
+    label: "Content",
+    items: [
+      { href: "/parent/monthly-highlights", label: "Monthly Highlights", icon: Megaphone },
+      { href: "/parent/news-events", label: "News & Events", icon: Newspaper },
+    ],
   },
 ];
 

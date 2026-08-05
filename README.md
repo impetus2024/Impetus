@@ -95,6 +95,7 @@ Every variable is documented inline in [`.env.local.example`](.env.local.example
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_URL` | Recommended | Cloudflare R2 storage — degrades gracefully (logged warning, upload fails cleanly) if unset, so auth/data flows can stand up before storage is wired in |
 | `R2_PRIVATE_BUCKET_NAME` | Optional | A second bucket with public access left off, for a real public/private boundary on staff/player documents (see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)) |
 | `RESEND_API_KEY` / `EMAIL_FROM` | Recommended | Transactional email (invites, password resets) — same graceful-degradation as R2 |
+| `RESEND_WEBHOOK_SECRET` | Recommended | Verifies `/api/webhooks/resend` requests actually came from Resend — unset means the endpoint rejects everything with 500 rather than skip verification |
 | `DEV_DEFAULT_PASSWORD` | Local dev only | Every newly provisioned account gets this fixed password instead of a random emailed one. **The app refuses to start in production if this is set** (see `src/lib/env.ts`) |
 | `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Optional | Error tracking — a no-op everywhere until `SENTRY_DSN` is set |
 | `SEED_SUPER_ADMIN_EMAIL` / `_PASSWORD` / `_NAME` | One-time | Only read by `scripts/seed-super-admin.ts` |

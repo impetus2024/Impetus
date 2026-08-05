@@ -71,7 +71,15 @@ export async function provisionUser(params: {
   // of silently succeeding with no way to reach the new account.
   let emailSent = false;
   try {
-    await sendAccountInviteEmail({ to: email, fullName, tempPassword, loginUrl });
+    await sendAccountInviteEmail({
+      to: email,
+      fullName,
+      tempPassword,
+      loginUrl,
+      emailType: "account_invite",
+      recipientProfileId: data.user.id,
+      centreId: centreId ?? null,
+    });
     emailSent = true;
   } catch (err) {
     logWarning(`Invite email not sent for ${email}:`, err);
@@ -90,8 +98,9 @@ export async function resetUserPassword(params: {
   email: string;
   fullName: string;
   loginUrl: string;
+  centreId: string | null;
 }): Promise<{ tempPassword: string; emailSent: boolean }> {
-  const { userId, email, fullName, loginUrl } = params;
+  const { userId, email, fullName, loginUrl, centreId } = params;
   const tempPassword = generateTempPassword();
   const admin = createAdminClient();
 
@@ -119,7 +128,15 @@ export async function resetUserPassword(params: {
 
   let emailSent = false;
   try {
-    await sendAccountInviteEmail({ to: email, fullName, tempPassword, loginUrl });
+    await sendAccountInviteEmail({
+      to: email,
+      fullName,
+      tempPassword,
+      loginUrl,
+      emailType: "password_reset",
+      recipientProfileId: userId,
+      centreId,
+    });
     emailSent = true;
   } catch (err) {
     logWarning(`Password reset email not sent for ${email}:`, err);

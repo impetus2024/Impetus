@@ -2,10 +2,11 @@ import { CalendarCheck, Users, ClipboardCheck, ClipboardX, HeartPulse } from "lu
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { StatCard } from "@/components/stat-card";
-import { DashboardGreeting } from "@/components/dashboard-greeting";
 import { InsightBanner } from "@/components/insight-banner";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { MonthlyHighlightsFeed } from "@/components/monthly-highlights/monthly-highlights-feed";
+import { NewsEventsFeed } from "@/components/news-events/news-events-feed";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -82,8 +83,6 @@ export default async function CoachDashboard() {
 
   return (
     <div className="space-y-6">
-      <DashboardGreeting name={coach.full_name || "coach"} subtitle={`${batchIds.length} assigned batches`} />
-
       {batchIds.length > 0 && presentToday + absentToday === 0 ? (
         <InsightBanner
           tone="warning"
@@ -116,6 +115,11 @@ export default async function CoachDashboard() {
           <SimpleBarChart data={presentByDay} highlightLabel={days[days.length - 1].label} />
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <NewsEventsFeed />
+        <MonthlyHighlightsFeed />
+      </div>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { roleHome, type UserRole } from "@/lib/auth/dal";
 import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
 import { safeNextPath } from "@/lib/url";
+import { logWarning } from "@/lib/logger";
 import { ACCOUNT_DISABLED_MESSAGE } from "./constants";
 
 const LoginSchema = z.object({
@@ -40,6 +41,12 @@ export async function login(
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error || !data.user) {
+    // Supabase collapses several distinct rejection reasons (wrong password,
+    // unconfirmed email, banned user) into similar-looking errors — logging
+    // the real one here is the only way to tell them apart after the fact,
+    // since the user-facing message below is intentionally generic (never
+    // reveal *why* a login failed to an unauthenticated caller).
+    logWarning(`Login failed for ${parsed.data.email.trim().toLowerCase()}:`, error);
     recordAttempt(rateLimitKey);
     return { error: "Invalid email or password." };
   }

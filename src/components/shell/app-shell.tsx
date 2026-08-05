@@ -7,12 +7,18 @@ export function AppShell({
   roleLabel,
   userName,
   userEmail,
+  userAvatarUrl,
+  greetingTitle,
+  greetingDateLine,
   children,
 }: {
   navKey: NavKey;
   roleLabel: string;
   userName: string;
   userEmail: string;
+  userAvatarUrl?: string;
+  greetingTitle: string;
+  greetingDateLine: string;
   children: React.ReactNode;
 }) {
   return (
@@ -24,6 +30,9 @@ export function AppShell({
           roleLabel={roleLabel}
           userName={userName}
           userEmail={userEmail}
+          userAvatarUrl={userAvatarUrl}
+          greetingTitle={greetingTitle}
+          greetingDateLine={greetingDateLine}
         />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <div className="mx-auto w-full max-w-7xl">{children}</div>

@@ -349,6 +349,7 @@ export async function resetAdministratorPassword(
       email: staff.email,
       fullName: staff.full_name,
       loginUrl: absoluteUrl("/login"),
+      centreId: centreAdmin.centre_id!,
     });
     return result;
   } catch (err) {

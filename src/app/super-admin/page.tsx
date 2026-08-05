@@ -2,10 +2,11 @@ import { Users, CalendarCheck, UserCog, DoorOpen, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { StatCard } from "@/components/stat-card";
-import { DashboardGreeting } from "@/components/dashboard-greeting";
 import { InsightBanner } from "@/components/insight-banner";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { MonthlyHighlightsFeed } from "@/components/monthly-highlights/monthly-highlights-feed";
+import { NewsEventsFeed } from "@/components/news-events/news-events-feed";
 import { getLastNMonths, monthKeyOf } from "@/lib/months";
 import { CentreSelect } from "./centre-select";
 
@@ -19,7 +20,7 @@ export default async function SuperAdminDashboard({
 }: {
   searchParams: Promise<{ centreId?: string }>;
 }) {
-  const superAdmin = await requireRole("super_admin");
+  await requireRole("super_admin");
   const { centreId } = await searchParams;
   const supabase = await createClient();
 
@@ -33,9 +34,8 @@ export default async function SuperAdminDashboard({
   const centresWithoutAdmin = (centres ?? []).filter((c) => !centresWithAdmin.has(c.id));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <DashboardGreeting name={superAdmin.full_name || "there"} subtitle={`${centres?.length ?? 0} centres`} />
+    <div className="flex min-h-[calc(100dvh-6rem)] flex-col space-y-6 sm:min-h-[calc(100dvh-7rem)] lg:min-h-[calc(100dvh-8rem)]">
+      <div className="flex justify-end">
         <CentreSelect centres={centres ?? []} selectedId={selectedCentreId} />
       </div>
 
@@ -108,13 +108,18 @@ async function CentreMetrics({ centreId }: { centreId: string }) {
   }));
 
   return (
-    <div className="space-y-6">
+    <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Active Players" value={players.count ?? 0} icon={Users} />
         <StatCard label="Active Batches" value={batches.count ?? 0} icon={CalendarCheck} />
         <StatCard label="Staff" value={staff.count ?? 0} icon={UserCog} />
         <StatCard label="Checked In Now" value={checkedIn.count ?? 0} icon={DoorOpen} />
         <StatCard label="Payments This Month" value={paymentsThisMonth.toFixed(0)} icon={Wallet} />
+      </div>
+
+      <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+        <NewsEventsFeed centreId={centreId} />
+        <MonthlyHighlightsFeed centreId={centreId} />
       </div>
 
       <Card className="rounded-2xl border-border/70 shadow-card">
@@ -126,6 +131,6 @@ async function CentreMetrics({ centreId }: { centreId: string }) {
           <SimpleBarChart data={paymentsByMonth} />
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
