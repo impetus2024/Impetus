@@ -18,6 +18,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Impetus — Club Management",
   description: "Club management system",
+  // Internal club-management software — never meant to be indexed or
+  // listed by any search engine. robots.txt (src/app/robots.ts) covers
+  // crawling; this covers indexing even if a page is somehow crawled.
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function RootLayout({

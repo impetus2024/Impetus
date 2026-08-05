@@ -17,7 +17,7 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sheet,
   SheetContent,
@@ -78,11 +78,17 @@ export function AppTopbar({
   roleLabel,
   userName,
   userEmail,
+  userAvatarUrl,
+  greetingTitle,
+  greetingDateLine,
 }: {
   navKey: NavKey;
   roleLabel: string;
   userName: string;
   userEmail: string;
+  userAvatarUrl?: string;
+  greetingTitle: string;
+  greetingDateLine: string;
 }) {
   const groups = NAV_BY_KEY[navKey];
   const { theme, setTheme } = useTheme();
@@ -120,24 +126,28 @@ export function AppTopbar({
         </SheetContent>
       </Sheet>
 
-      {/* Breadcrumb */}
-      <div className="hidden min-w-0 items-center gap-1.5 text-sm sm:flex">
-        <span className="text-muted-foreground">{breadcrumb.roleLabel}</span>
-        {breadcrumb.group && (
-          <>
-            <ChevronRight className="size-3.5 text-muted-foreground/50" />
-            <span className="text-muted-foreground">{breadcrumb.group}</span>
-          </>
-        )}
-        {breadcrumb.label && (
-          <>
-            <ChevronRight className="size-3.5 text-muted-foreground/50" />
-            <span className="font-medium text-foreground">{breadcrumb.label}</span>
-          </>
-        )}
-      </div>
-
-      <div className="flex-1" />
+      {/* On the root Dashboard page (the only route with no group, per
+          nav-config), show the greeting here instead of the breadcrumb —
+          "Dashboard" would be redundant with it, and this reclaims the row
+          for it rather than repeating it further down the page. */}
+      {breadcrumb.group ? (
+        <div className="hidden min-w-0 flex-1 items-center gap-1.5 text-sm sm:flex">
+          <span className="text-muted-foreground">{breadcrumb.roleLabel}</span>
+          <ChevronRight className="size-3.5 text-muted-foreground/50" />
+          <span className="text-muted-foreground">{breadcrumb.group}</span>
+          {breadcrumb.label && (
+            <>
+              <ChevronRight className="size-3.5 text-muted-foreground/50" />
+              <span className="font-medium text-foreground">{breadcrumb.label}</span>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">{greetingTitle}</p>
+          <p className="truncate text-xs text-muted-foreground">{greetingDateLine}</p>
+        </div>
+      )}
 
       {/* Quick nav search */}
       <Popover open={searchOpen && results.length > 0} onOpenChange={setSearchOpen}>
@@ -217,6 +227,7 @@ export function AppTopbar({
           }
         >
           <Avatar>
+            {userAvatarUrl && <AvatarImage src={userAvatarUrl} alt={userName} />}
             <AvatarFallback className="bg-primary/10 font-medium text-primary">
               {initials(userName)}
             </AvatarFallback>

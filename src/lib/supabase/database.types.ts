@@ -231,6 +231,105 @@ export type Database = {
         }
         Relationships: []
       }
+      email_logs: {
+        Row: {
+          bounced_at: string | null
+          centre_id: string | null
+          click_count: number
+          clicked_at: string | null
+          complained_at: string | null
+          created_at: string
+          delivered_at: string | null
+          email_type: string
+          error_message: string | null
+          failed_at: string | null
+          id: string
+          open_count: number
+          opened_at: string | null
+          recipient_email: string
+          recipient_profile_id: string | null
+          resend_email_id: string | null
+          sent_at: string
+          status: Database["public"]["Enums"]["email_status"]
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          bounced_at?: string | null
+          centre_id?: string | null
+          click_count?: number
+          clicked_at?: string | null
+          complained_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          email_type: string
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          open_count?: number
+          opened_at?: string | null
+          recipient_email: string
+          recipient_profile_id?: string | null
+          resend_email_id?: string | null
+          sent_at?: string
+          status?: Database["public"]["Enums"]["email_status"]
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bounced_at?: string | null
+          centre_id?: string | null
+          click_count?: number
+          clicked_at?: string | null
+          complained_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          email_type?: string
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          open_count?: number
+          opened_at?: string | null
+          recipient_email?: string
+          recipient_profile_id?: string | null
+          resend_email_id?: string | null
+          sent_at?: string
+          status?: Database["public"]["Enums"]["email_status"]
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_logs_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_logs_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_webhook_events: {
+        Row: {
+          received_at: string
+          webhook_event_id: string
+        }
+        Insert: {
+          received_at?: string
+          webhook_event_id: string
+        }
+        Update: {
+          received_at?: string
+          webhook_event_id?: string
+        }
+        Relationships: []
+      }
       five_s_category_notes: {
         Row: {
           category: Database["public"]["Enums"]["five_s_category"]
@@ -714,6 +813,219 @@ export type Database = {
           },
         ]
       }
+      monthly_highlight_centres: {
+        Row: {
+          centre_id: string
+          created_at: string
+          created_by: string
+          highlight_id: string
+        }
+        Insert: {
+          centre_id: string
+          created_at?: string
+          created_by: string
+          highlight_id: string
+        }
+        Update: {
+          centre_id?: string
+          created_at?: string
+          created_by?: string
+          highlight_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_highlight_centres_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_highlight_centres_highlight_id_fkey"
+            columns: ["highlight_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_highlights"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monthly_highlight_dismissals: {
+        Row: {
+          dismissed_at: string
+          monthly_highlight_id: string
+          user_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          monthly_highlight_id: string
+          user_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          monthly_highlight_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_highlight_dismissals_monthly_highlight_id_fkey"
+            columns: ["monthly_highlight_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_highlights"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_highlight_dismissals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monthly_highlights: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          expires_at: string
+          id: string
+          image_path: string | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          image_path?: string | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          image_path?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_highlights_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_event_centres: {
+        Row: {
+          centre_id: string
+          created_at: string
+          created_by: string
+          news_event_id: string
+        }
+        Insert: {
+          centre_id: string
+          created_at?: string
+          created_by: string
+          news_event_id: string
+        }
+        Update: {
+          centre_id?: string
+          created_at?: string
+          created_by?: string
+          news_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_event_centres_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "news_event_centres_news_event_id_fkey"
+            columns: ["news_event_id"]
+            isOneToOne: false
+            referencedRelation: "news_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_event_dismissals: {
+        Row: {
+          dismissed_at: string
+          news_event_id: string
+          user_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          news_event_id: string
+          user_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          news_event_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_event_dismissals_news_event_id_fkey"
+            columns: ["news_event_id"]
+            isOneToOne: false
+            referencedRelation: "news_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "news_event_dismissals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_events: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          event_date: string | null
+          expires_at: string
+          id: string
+          title: string
+          type: Database["public"]["Enums"]["news_event_type"]
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          event_date?: string | null
+          id?: string
+          title: string
+          type: Database["public"]["Enums"]["news_event_type"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          event_date?: string | null
+          id?: string
+          title?: string
+          type?: Database["public"]["Enums"]["news_event_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       packages: {
         Row: {
           centre_id: string
@@ -1185,12 +1497,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      email_analytics_summary: {
+        Args: { p_centre_id: string; p_since: string; p_until: string }
+        Returns: {
+          bounced_count: number
+          clicked_count: number
+          complained_count: number
+          delivered_count: number
+          failed_count: number
+          opened_count: number
+          sent_count: number
+        }[]
+      }
       payments_by_month: {
         Args: { p_centre_id: string; p_since: string }
         Returns: {
           month: string
           total: number
         }[]
+      }
+      record_email_event: {
+        Args: {
+          p_error_message?: string | null
+          p_event_type: Database["public"]["Enums"]["email_status"]
+          p_resend_email_id: string
+          p_webhook_event_id: string
+        }
+        Returns: undefined
       }
       revoke_user_sessions: {
         Args: { target_user_id: string }
@@ -1226,9 +1559,18 @@ export type Database = {
     }
     Enums: {
       attendance_status: "present" | "absent"
+      email_status:
+        | "sent"
+        | "delivered"
+        | "opened"
+        | "clicked"
+        | "bounced"
+        | "failed"
+        | "complained"
       five_s_answer_scale: "rarely" | "sometimes" | "frequently" | "always"
       five_s_category: "speed" | "stamina" | "strength" | "spirit" | "skill"
       gate_pass_action: "check_in" | "check_out"
+      news_event_type: "upcoming_event" | "news_announcement"
       user_role:
         | "super_admin"
         | "centre_admin"
@@ -1368,6 +1710,15 @@ export const Constants = {
   public: {
     Enums: {
       attendance_status: ["present", "absent"],
+      email_status: [
+        "sent",
+        "delivered",
+        "opened",
+        "clicked",
+        "bounced",
+        "failed",
+        "complained",
+      ],
       five_s_answer_scale: ["rarely", "sometimes", "frequently", "always"],
       five_s_category: ["speed", "stamina", "strength", "spirit", "skill"],
       gate_pass_action: ["check_in", "check_out"],

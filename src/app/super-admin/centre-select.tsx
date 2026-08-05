@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Select,
   SelectContent,
@@ -10,6 +10,10 @@ import {
 } from "@/components/ui/select";
 import { selectLabel } from "@/lib/utils";
 
+// Navigates within whatever super-admin page it's rendered on (not hardcoded
+// to /super-admin) and preserves every other URL param already set — same
+// convention as ListSearch/ListFilter/ListPagination — so switching centres
+// on, e.g., the email analytics page doesn't reset its date range or search.
 export function CentreSelect({
   centres,
   selectedId,
@@ -18,12 +22,17 @@ export function CentreSelect({
   selectedId?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   return (
     <Select
       value={selectedId}
       onValueChange={(id) => {
-        if (id) router.push(`/super-admin?centreId=${id}`);
+        if (!id) return;
+        const params = new URLSearchParams(searchParams);
+        params.set("centreId", id);
+        router.push(`${pathname}?${params.toString()}`);
       }}
     >
       <SelectTrigger className="w-56">

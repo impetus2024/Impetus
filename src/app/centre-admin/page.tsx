@@ -12,11 +12,12 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { StatCard } from "@/components/stat-card";
-import { DashboardGreeting } from "@/components/dashboard-greeting";
 import { InsightBanner } from "@/components/insight-banner";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { MonthlyHighlightsFeed } from "@/components/monthly-highlights/monthly-highlights-feed";
+import { NewsEventsFeed } from "@/components/news-events/news-events-feed";
 import { getLastNMonths, monthKeyOf } from "@/lib/months";
 
 const QUICK_ACTIONS = [
@@ -34,9 +35,8 @@ export default async function CentreAdminDashboard() {
 
   const months = getLastNMonths(6);
 
-  const [centre, players, batches, staff, checkedIn, paymentsByMonthRows, recentGatePass] =
+  const [players, batches, staff, checkedIn, paymentsByMonthRows] =
     await Promise.all([
-      supabase.from("centres").select("name").eq("id", centreId).maybeSingle(),
       supabase
         .from("players")
         .select("id", { count: "exact", head: true })
@@ -65,12 +65,6 @@ export default async function CentreAdminDashboard() {
         p_centre_id: centreId,
         p_since: months[0].start.toISOString().slice(0, 10),
       }),
-      supabase
-        .from("gate_pass_logs")
-        .select("action, reason, created_at, players(name)")
-        .eq("centre_id", centreId)
-        .order("created_at", { ascending: false })
-        .limit(5),
     ]);
 
   const totalByMonthKey = new Map(
@@ -90,9 +84,7 @@ export default async function CentreAdminDashboard() {
   const staffCount = staff.count ?? 0;
 
   return (
-    <div className="space-y-6">
-      <DashboardGreeting name={centreAdmin.full_name || "there"} subtitle={centre.data?.name} />
-
+    <div className="flex min-h-[calc(100dvh-6rem)] flex-col space-y-6 sm:min-h-[calc(100dvh-7rem)] lg:min-h-[calc(100dvh-8rem)]">
       {batchCount === 0 ? (
         <InsightBanner
           tone="warning"
@@ -123,51 +115,20 @@ export default async function CentreAdminDashboard() {
         <StatCard label="Payments This Month" value={paymentsThisMonth.toFixed(0)} icon={Wallet} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <Card className="rounded-2xl border-border/70 shadow-card lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Payments</CardTitle>
-            <CardDescription>Collected per month, last 6 months</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SimpleBarChart data={paymentsByMonth} />
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-border/70 shadow-card lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest gate pass entries</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {(recentGatePass.data ?? []).map((log, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{log.players?.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{log.reason}</p>
-                </div>
-                <span
-                  className={
-                    log.action === "check_in"
-                      ? "shrink-0 text-xs font-medium text-status-good"
-                      : "shrink-0 text-xs font-medium text-muted-foreground"
-                  }
-                >
-                  {log.action === "check_in" ? "Checked in" : "Checked out"}
-                </span>
-              </div>
-            ))}
-            {(recentGatePass.data ?? []).length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No gate pass activity yet.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+        <NewsEventsFeed />
+        <MonthlyHighlightsFeed />
       </div>
+
+      <Card className="rounded-2xl border-border/70 shadow-card">
+        <CardHeader>
+          <CardTitle>Payments</CardTitle>
+          <CardDescription>Collected per month, last 6 months</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SimpleBarChart data={paymentsByMonth} />
+        </CardContent>
+      </Card>
 
       {canEdit && (
         <Card className="rounded-2xl border-border/70 shadow-card">

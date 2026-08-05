@@ -27,6 +27,7 @@ const RECOMMENDED_VARS = [
   "R2_PUBLIC_URL",
   "RESEND_API_KEY",
   "EMAIL_FROM",
+  "RESEND_WEBHOOK_SECRET",
 ] as const;
 
 export function validateEnv(): void {

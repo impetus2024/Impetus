@@ -5,9 +5,10 @@ import { requireRole } from "@/lib/auth/dal";
 import { getParentChildren } from "@/lib/parent/children";
 import { getFiveSCurrentScores } from "@/lib/five-s/scores";
 import { StatCard } from "@/components/stat-card";
-import { DashboardGreeting } from "@/components/dashboard-greeting";
 import { InsightBanner } from "@/components/insight-banner";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { MonthlyHighlightsFeed } from "@/components/monthly-highlights/monthly-highlights-feed";
+import { NewsEventsFeed } from "@/components/news-events/news-events-feed";
 import { AttendanceCalendar } from "@/components/profile/attendance-calendar";
 import { FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 import { FiveSPerformanceOverview } from "@/components/profile/five-s-performance-overview";
@@ -26,8 +27,7 @@ export default async function ParentDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <DashboardGreeting name={parent.full_name || "there"} />
+      <div className="flex justify-end">
         <ChildSelect options={children} selectedId={selectedId} basePath="/parent" />
       </div>
 
@@ -62,6 +62,11 @@ export default async function ParentDashboard({
           </div>
         </>
       ) : null}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <NewsEventsFeed />
+        <MonthlyHighlightsFeed />
+      </div>
     </div>
   );
 }

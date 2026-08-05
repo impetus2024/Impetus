@@ -1,0 +1,30 @@
+import { requireRole } from "@/lib/auth/dal";
+import { getMonthlyHighlights } from "@/lib/monthly-highlights/queries";
+import { parsePageParam, totalPages as computeTotalPages } from "@/lib/pagination";
+import { ListPagination } from "@/components/list-pagination";
+import { MonthlyHighlightsTable } from "@/components/monthly-highlights/monthly-highlights-table";
+
+// Read-only for Medical — RLS scopes the listing to their own centre (see
+// 20260805060000_news_events_monthly_highlights_broader_read_access.sql);
+// no Add/Edit/Delete, matching every other role besides centre_admin/
+// super_admin.
+export default async function MedicalMonthlyHighlightsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  await requireRole("medical");
+  const { page: pageParam } = await searchParams;
+  const page = parsePageParam(pageParam);
+  const { highlights, count } = await getMonthlyHighlights(page);
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Monthly Highlights</h1>
+
+      <MonthlyHighlightsTable highlights={highlights} canManage={false} />
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
+    </div>
+  );
+}
