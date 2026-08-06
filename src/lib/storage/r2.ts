@@ -10,6 +10,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { randomUUID } from "crypto";
 import { isRateLimited, recordAttempt } from "@/lib/auth/rate-limit";
+import { MAX_UPLOAD_BYTES } from "./upload-constraints";
 
 // Cloudflare R2 (S3-compatible). "public" objects (centre logos) are served
 // via R2_PUBLIC_URL and readable by anyone with the URL — that's the whole
@@ -55,8 +56,6 @@ function bucketFor(visibility: Visibility) {
   if (!name) throw new Error("R2_BUCKET_NAME is not set");
   return name;
 }
-
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
 
 // Every upload in this app is either a photo/scan of an ID document or a
 // profile/logo image — nothing here legitimately needs to be HTML, SVG

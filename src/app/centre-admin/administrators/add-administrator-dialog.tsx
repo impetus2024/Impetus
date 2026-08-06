@@ -3,6 +3,7 @@
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Dialog,
   DialogContent,
@@ -115,34 +116,25 @@ export function AddAdministratorDialog() {
               </Field>
               <Field>
                 <FieldLabel htmlFor="aadhaarCard">Aadhaar Card</FieldLabel>
-                <Input id="aadhaarCard" name="aadhaarCard" type="file" />
+                <FileInput id="aadhaarCard" name="aadhaarCard" />
               </Field>
               <Field>
                 <FieldLabel htmlFor="birthCertificate">
                   Birth Certificate
                 </FieldLabel>
-                <Input
-                  id="birthCertificate"
-                  name="birthCertificate"
-                  type="file"
-                />
+                <FileInput id="birthCertificate" name="birthCertificate" />
               </Field>
               <Field>
                 <FieldLabel htmlFor="profilePicture">
                   Upload Profile Picture
                 </FieldLabel>
-                <Input
-                  id="profilePicture"
-                  name="profilePicture"
-                  type="file"
-                  accept="image/*"
-                />
+                <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
               </Field>
               <Field>
                 <FieldLabel htmlFor="otherDocuments">
                   Other Documents
                 </FieldLabel>
-                <Input id="otherDocuments" name="otherDocuments" type="file" />
+                <FileInput id="otherDocuments" name="otherDocuments" />
               </Field>
             </FieldGroup>
           </FieldSet>

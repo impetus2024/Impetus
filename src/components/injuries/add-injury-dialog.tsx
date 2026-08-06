@@ -4,6 +4,7 @@ import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +74,7 @@ export function AddInjuryDialog({
               <FieldLabel htmlFor="reportDocument">
                 Upload Injury / Disease Report Document
               </FieldLabel>
-              <Input id="reportDocument" name="reportDocument" type="file" />
+              <FileInput id="reportDocument" name="reportDocument" />
             </Field>
 
             {state?.error && (

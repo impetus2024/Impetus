@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Select,
   SelectContent,
@@ -221,7 +222,7 @@ export function PlayerProfileForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="aadhaarDoc">Upload Aadhaar</FieldLabel>
-          <Input id="aadhaarDoc" name="aadhaarDoc" type="file" className={FILLED_INPUT} />
+          <FileInput id="aadhaarDoc" name="aadhaarDoc" />
           {documentLinks?.aadhaar && (
             <FieldDescription>
               <a href={documentLinks.aadhaar} target="_blank" rel="noreferrer" className="underline">
@@ -232,7 +233,7 @@ export function PlayerProfileForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="medicalRecords">Upload Medical Records</FieldLabel>
-          <Input id="medicalRecords" name="medicalRecords" type="file" className={FILLED_INPUT} />
+          <FileInput id="medicalRecords" name="medicalRecords" />
           {documentLinks?.medicalRecords && (
             <FieldDescription>
               <a href={documentLinks.medicalRecords} target="_blank" rel="noreferrer" className="underline">
@@ -243,7 +244,7 @@ export function PlayerProfileForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="profilePicture">Upload Profile Picture</FieldLabel>
-          <Input id="profilePicture" name="profilePicture" type="file" accept="image/*" className={FILLED_INPUT} />
+          <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
           {documentLinks?.profilePicture && (
             <FieldDescription>
               <a href={documentLinks.profilePicture} target="_blank" rel="noreferrer" className="underline">
