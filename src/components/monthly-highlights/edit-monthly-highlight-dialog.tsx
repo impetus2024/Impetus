@@ -4,6 +4,7 @@ import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ export function EditMonthlyHighlightDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor={`image-${highlight.id}`}>Image</FieldLabel>
-              <Input id={`image-${highlight.id}`} name="image" type="file" accept="image/*" />
+              <FileInput id={`image-${highlight.id}`} name="image" accept="image/*" />
               <FieldDescription>Leave blank to keep the current image.</FieldDescription>
             </Field>
             {state?.error && (

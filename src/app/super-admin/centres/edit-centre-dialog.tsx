@@ -3,6 +3,7 @@
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Dialog,
   DialogContent,
@@ -74,7 +75,7 @@ export function EditCentreDialog({
             </Field>
             <Field>
               <FieldLabel htmlFor={`logo-${centre.id}`}>Centre Logo</FieldLabel>
-              <Input id={`logo-${centre.id}`} name="logo" type="file" accept="image/*" />
+              <FileInput id={`logo-${centre.id}`} name="logo" accept="image/*" />
               <FieldDescription>Leave blank to keep the current logo.</FieldDescription>
             </Field>
             {state?.error && (

@@ -4,8 +4,9 @@ import { withSentryConfig } from "@sentry/nextjs";
 // Built once at config-eval time (not per-request) — safe since these are
 // build/deploy-time env vars, not user input.
 function buildCsp() {
-  const connectSrc = ["'self'"];
+  const connectSrc = ["'self'", "https://cloudflareinsights.com"];
   const imgSrc = ["'self'", "data:"];
+  const scriptSrc = ["'self'", "'unsafe-inline'", "https://static.cloudflareinsights.com"];
 
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
     connectSrc.push(process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -24,7 +25,11 @@ function buildCsp() {
     // of a nonce-based CSP wired through middleware (bigger lift than this
     // pass) — still meaningfully restricts cross-origin script/object
     // loading and clickjacking (frame-ancestors) even without that.
-    `script-src 'self' 'unsafe-inline'`,
+    // static.cloudflareinsights.com is Cloudflare's edge-injected Web
+    // Analytics beacon (added when the zone is proxied through Cloudflare,
+    // not something this app loads itself) — allow-listed here, and its
+    // reporting endpoint in connect-src, so it isn't CSP-blocked.
+    `script-src ${scriptSrc.join(" ")}`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src ${imgSrc.join(" ")}`,
     `font-src 'self'`,

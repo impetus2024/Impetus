@@ -3,6 +3,7 @@
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ export function AddCentreDialog() {
               </Field>
               <Field>
                 <FieldLabel htmlFor="logo">Centre Logo</FieldLabel>
-                <Input id="logo" name="logo" type="file" accept="image/*" required />
+                <FileInput id="logo" name="logo" accept="image/*" required />
               </Field>
               <Field>
                 <FieldLabel htmlFor="country">Centre Country</FieldLabel>

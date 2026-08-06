@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/empty-state";
 import { ListSearch } from "@/components/list-search";
 import { ListFilter } from "@/components/list-filter";
 import { DateRangeFilter } from "@/components/date-range-filter";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -83,12 +85,13 @@ function pairSessions(logsAscending: LogRow[]): Session[] {
 export default async function GatePassPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; from?: string; to?: string; page?: string }>;
 }) {
   const centreAdmin = await requireRole("centre_admin", "staff", "finance");
   const canEdit = centreAdmin.role === "centre_admin";
-  const { q, status, from, to } = await searchParams;
+  const { q, status, from, to, page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
 
   // Default to the last 30 days when the user hasn't picked a range —
   // without this, every load of this page (the common case) scanned the
@@ -111,7 +114,7 @@ export default async function GatePassPage({
 
   const [{ data: rawLogs }, { data: players }] = await Promise.all([
     // Ascending + a generous cap so pairing sees each player's actions in
-    // order; the final session list (below) is what actually gets capped
+    // order; the final session list (below) is what actually gets paginated
     // for display.
     query.order("created_at", { ascending: true }).limit(1000),
     supabase
@@ -131,7 +134,13 @@ export default async function GatePassPage({
     const bTime = b.checkIn?.time ?? b.checkOut?.time ?? "";
     return bTime.localeCompare(aTime);
   });
-  sessions = sessions.slice(0, 200);
+
+  // Sessions are paired in memory from raw log rows (a "session" doesn't map
+  // 1:1 to a DB row, so this can't be a .range() query like other list
+  // pages) — paginate the already-computed, already-filtered array instead
+  // of dumping up to ~500 rows into the DOM at once.
+  const [rangeFrom, rangeTo] = pageRange(page);
+  const pagedSessions = sessions.slice(rangeFrom, rangeTo + 1);
 
   const hasFilters = Boolean(q || status || from || to);
 
@@ -165,7 +174,7 @@ export default async function GatePassPage({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sessions.map((s) => (
+          {pagedSessions.map((s) => (
             <TableRow key={s.key}>
               <TableCell>{s.playerName}</TableCell>
               <TableCell>{s.checkIn ? new Date(s.checkIn.time).toLocaleString() : "—"}</TableCell>
@@ -194,6 +203,8 @@ export default async function GatePassPage({
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(sessions.length)} />
     </div>
   );
 }

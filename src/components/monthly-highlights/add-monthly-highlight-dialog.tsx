@@ -4,6 +4,7 @@ import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FileInput } from "@/components/ui/file-input";
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,7 @@ export function AddMonthlyHighlightDialog({
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="image">Image</FieldLabel>
-                <Input id="image" name="image" type="file" accept="image/*" required />
+                <FileInput id="image" name="image" accept="image/*" required />
               </Field>
               <Field>
                 <FieldLabel htmlFor="title">Title</FieldLabel>

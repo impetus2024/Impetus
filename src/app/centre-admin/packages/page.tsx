@@ -4,6 +4,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
+import { ListPagination } from "@/components/list-pagination";
+import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import {
   Table,
   TableBody,
@@ -16,18 +18,28 @@ import { PackageFormDialog } from "./package-form-dialog";
 import { PackageRowActions } from "./row-actions";
 import { createPackage } from "./actions";
 
-export default async function PackagesPage() {
+export default async function PackagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const centreAdmin = await requireRole("centre_admin", "staff", "finance");
   const canEdit = centreAdmin.role === "centre_admin";
+  const { page: pageParam } = await searchParams;
   const supabase = await createClient();
+  const page = parsePageParam(pageParam);
+  const [from, to] = pageRange(page);
 
-  const [{ data: packages }, { data: playerTypes }] = await Promise.all([
+  const [{ data: packages, count }, { data: playerTypes }] = await Promise.all([
     supabase
       .from("packages")
-      .select("id, name, player_type_id, price, duration, is_active, player_types(name)")
+      .select("id, name, player_type_id, price, duration, is_active, player_types(name)", {
+        count: "exact",
+      })
       .eq("centre_id", centreAdmin.centre_id!)
       .eq("is_custom", false)
-      .order("name"),
+      .order("name")
+      .range(from, to),
     supabase
       .from("player_types")
       .select("id, name")
@@ -91,6 +103,8 @@ export default async function PackagesPage() {
           )}
         </TableBody>
       </Table>
+
+      <ListPagination page={page} totalPages={computeTotalPages(count)} />
     </div>
   );
 }
