@@ -48,7 +48,7 @@ export default async function Coach5sModelStaminaPage({
     getFiveSTests(),
     supabase
       .from("five_s_results")
-      .select("test_id, score, vo2_max, remarks")
+      .select("test_id, score, level, shuttle, vo2_max, remarks")
       .eq("player_id", playerId),
     supabase
       .from("five_s_category_notes")

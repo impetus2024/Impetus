@@ -6,7 +6,12 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { isFiveSWindowOpen } from "@/lib/five-s/testing-window";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
+import { vo2MaxFromBeepTest, vo2MaxFromCooperTest } from "@/lib/five-s/vo2-max";
 import { logError } from "@/lib/logger";
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 // Shared by every score/response-submitting action below — score entry
 // (not publishing) only happens while the centre admin's 5S testing
@@ -171,7 +176,7 @@ export type StaminaScoresFormState = { error?: string } | undefined;
 export async function submitStaminaScores(
   batchId: string,
   playerId: string,
-  testIds: string[],
+  tests: { id: string; unit: string }[],
   _prev: StaminaScoresFormState,
   formData: FormData
 ): Promise<StaminaScoresFormState> {
@@ -198,36 +203,56 @@ export async function submitStaminaScores(
     player_id: string;
     test_id: string;
     centre_id: string;
-    score: number;
+    score: number | null;
+    level: number | null;
+    shuttle: number | null;
     vo2_max: number;
     remarks: string;
     recorded_by: string;
   }[] = [];
 
-  for (const testId of testIds) {
-    const score = Number(formData.get(`score_${testId}`));
-    const vo2Max = Number(formData.get(`vo2max_${testId}`));
-    const remarks = String(formData.get(`remarks_${testId}` ) ?? "").trim();
-
-    if (!Number.isFinite(score) || score <= 0) {
-      return { error: "Enter a valid score for every test." };
-    }
-    if (!Number.isFinite(vo2Max) || vo2Max <= 0) {
-      return { error: "Enter a valid VO2 Max for every test." };
-    }
+  // VO2 Max is never read from the form — it's always recomputed here from
+  // the coach's raw score, the one source of truth (see vo2-max.ts).
+  for (const test of tests) {
+    const remarks = String(formData.get(`remarks_${test.id}`) ?? "").trim();
     if (!remarks) {
       return { error: "Remarks are required for every test." };
     }
 
-    rows.push({
-      player_id: playerId,
-      test_id: testId,
-      centre_id: batch.centre_id,
-      score,
-      vo2_max: vo2Max,
-      remarks,
-      recorded_by: coach.id,
-    });
+    if (test.unit === "level") {
+      const level = Number(formData.get(`level_${test.id}`));
+      const shuttle = Number(formData.get(`shuttle_${test.id}`));
+      if (!Number.isInteger(level) || level < 0 || !Number.isInteger(shuttle) || shuttle < 0) {
+        return { error: "Enter a valid Level and Shuttle for every test." };
+      }
+      rows.push({
+        player_id: playerId,
+        test_id: test.id,
+        centre_id: batch.centre_id,
+        score: null,
+        level,
+        shuttle,
+        vo2_max: round2(vo2MaxFromBeepTest(level, shuttle)),
+        remarks,
+        recorded_by: coach.id,
+      });
+    } else {
+      const score = Number(formData.get(`score_${test.id}`));
+      if (!Number.isFinite(score) || score <= 0) {
+        return { error: "Enter a valid score for every test." };
+      }
+      rows.push({
+        player_id: playerId,
+        test_id: test.id,
+        centre_id: batch.centre_id,
+        score,
+        level: null,
+        shuttle: null,
+        vo2_max: round2(vo2MaxFromCooperTest(score)),
+        remarks,
+        recorded_by: coach.id,
+      });
+    }
   }
 
   const overallRemarks = String(formData.get("overall_remarks") ?? "").trim();

@@ -36,6 +36,7 @@ export type Database = {
     Tables: {
       age_categories: {
         Row: {
+          age: number | null
           centre_id: string
           created_at: string
           id: string
@@ -43,6 +44,7 @@ export type Database = {
           name: string
         }
         Insert: {
+          age?: number | null
           centre_id: string
           created_at?: string
           id?: string
@@ -50,6 +52,7 @@ export type Database = {
           name: string
         }
         Update: {
+          age?: number | null
           centre_id?: string
           created_at?: string
           id?: string
@@ -330,6 +333,36 @@ export type Database = {
         }
         Relationships: []
       }
+      five_s_age_bands: {
+        Row: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          created_at: string
+          display_order: number
+          id: string
+          label: string
+          max_age: number | null
+          min_age: number
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["five_s_category"]
+          created_at?: string
+          display_order?: number
+          id?: string
+          label: string
+          max_age?: number | null
+          min_age: number
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["five_s_category"]
+          created_at?: string
+          display_order?: number
+          id?: string
+          label?: string
+          max_age?: number | null
+          min_age?: number
+        }
+        Relationships: []
+      }
       five_s_category_notes: {
         Row: {
           category: Database["public"]["Enums"]["five_s_category"]
@@ -582,13 +615,15 @@ export type Database = {
         Row: {
           centre_id: string
           id: string
+          level: number | null
           player_id: string
           previous_recorded_at: string | null
           previous_score: number | null
           recorded_at: string
           recorded_by: string
           remarks: string | null
-          score: number
+          score: number | null
+          shuttle: number | null
           test_id: string
           updated_at: string
           vo2_max: number | null
@@ -596,13 +631,15 @@ export type Database = {
         Insert: {
           centre_id: string
           id?: string
+          level?: number | null
           player_id: string
           previous_recorded_at?: string | null
           previous_score?: number | null
           recorded_at?: string
           recorded_by: string
           remarks?: string | null
-          score: number
+          score?: number | null
+          shuttle?: number | null
           test_id: string
           updated_at?: string
           vo2_max?: number | null
@@ -610,13 +647,15 @@ export type Database = {
         Update: {
           centre_id?: string
           id?: string
+          level?: number | null
           player_id?: string
           previous_recorded_at?: string | null
           previous_score?: number | null
           recorded_at?: string
           recorded_by?: string
           remarks?: string | null
-          score?: number
+          score?: number | null
+          shuttle?: number | null
           test_id?: string
           updated_at?: string
           vo2_max?: number | null
@@ -645,6 +684,99 @@ export type Database = {
           },
           {
             foreignKeyName: "five_s_results_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_stamina_benchmarks: {
+        Row: {
+          age_band_id: string
+          id: string
+          level: number | null
+          shuttle: number | null
+          test_id: string
+          tier: Database["public"]["Enums"]["five_s_benchmark_tier"]
+          updated_at: string
+          value: number | null
+        }
+        Insert: {
+          age_band_id: string
+          id?: string
+          level?: number | null
+          shuttle?: number | null
+          test_id: string
+          tier: Database["public"]["Enums"]["five_s_benchmark_tier"]
+          updated_at?: string
+          value?: number | null
+        }
+        Update: {
+          age_band_id?: string
+          id?: string
+          level?: number | null
+          shuttle?: number | null
+          test_id?: string
+          tier?: Database["public"]["Enums"]["five_s_benchmark_tier"]
+          updated_at?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_stamina_benchmarks_age_band_id_fkey"
+            columns: ["age_band_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_age_bands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_stamina_benchmarks_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_test_benchmarks: {
+        Row: {
+          age_band_id: string
+          avg_value: number
+          id: string
+          max_value: number
+          min_value: number
+          test_id: string
+          updated_at: string
+        }
+        Insert: {
+          age_band_id: string
+          avg_value: number
+          id?: string
+          max_value: number
+          min_value: number
+          test_id: string
+          updated_at?: string
+        }
+        Update: {
+          age_band_id?: string
+          avg_value?: number
+          id?: string
+          max_value?: number
+          min_value?: number
+          test_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_test_benchmarks_age_band_id_fkey"
+            columns: ["age_band_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_age_bands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_test_benchmarks_test_id_fkey"
             columns: ["test_id"]
             isOneToOne: false
             referencedRelation: "five_s_tests"
@@ -841,6 +973,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "monthly_highlight_centres_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "monthly_highlight_centres_highlight_id_fkey"
             columns: ["highlight_id"]
             isOneToOne: false
@@ -896,6 +1035,7 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          expires_at?: string
           id?: string
           image_path?: string | null
           title: string
@@ -904,6 +1044,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          expires_at?: string
           id?: string
           image_path?: string | null
           title?: string
@@ -943,6 +1084,13 @@ export type Database = {
             columns: ["centre_id"]
             isOneToOne: false
             referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "news_event_centres_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -1003,6 +1151,7 @@ export type Database = {
           created_by: string
           description?: string | null
           event_date?: string | null
+          expires_at?: string
           id?: string
           title: string
           type: Database["public"]["Enums"]["news_event_type"]
@@ -1012,6 +1161,7 @@ export type Database = {
           created_by?: string
           description?: string | null
           event_date?: string | null
+          expires_at?: string
           id?: string
           title?: string
           type?: Database["public"]["Enums"]["news_event_type"]
@@ -1568,6 +1718,11 @@ export type Database = {
         | "failed"
         | "complained"
       five_s_answer_scale: "rarely" | "sometimes" | "frequently" | "always"
+      five_s_benchmark_tier:
+        | "poor_ceiling"
+        | "average_low"
+        | "average_high"
+        | "elite_floor"
       five_s_category: "speed" | "stamina" | "strength" | "spirit" | "skill"
       gate_pass_action: "check_in" | "check_out"
       news_event_type: "upcoming_event" | "news_announcement"
@@ -1720,8 +1875,15 @@ export const Constants = {
         "complained",
       ],
       five_s_answer_scale: ["rarely", "sometimes", "frequently", "always"],
+      five_s_benchmark_tier: [
+        "poor_ceiling",
+        "average_low",
+        "average_high",
+        "elite_floor",
+      ],
       five_s_category: ["speed", "stamina", "strength", "spirit", "skill"],
       gate_pass_action: ["check_in", "check_out"],
+      news_event_type: ["upcoming_event", "news_announcement"],
       user_role: [
         "super_admin",
         "centre_admin",

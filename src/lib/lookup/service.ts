@@ -17,7 +17,8 @@ function isUniqueViolation(error: { code?: string } | null) {
 export async function createLookupItem(
   table: LookupTable,
   name: string,
-  path: string
+  path: string,
+  extra?: Record<string, unknown>
 ): Promise<LookupFormState> {
   const centreAdmin = await requireRole("centre_admin");
   const trimmed = name.trim();
@@ -26,7 +27,7 @@ export async function createLookupItem(
   const supabase = await createClient();
   const { error } = await supabase
     .from(table)
-    .insert({ centre_id: centreAdmin.centre_id!, name: trimmed });
+    .insert({ centre_id: centreAdmin.centre_id!, name: trimmed, ...extra });
 
   if (error) {
     if (!isUniqueViolation(error)) logError(`Failed to create ${table} "${trimmed}":`, error);
@@ -45,7 +46,8 @@ export async function renameLookupItem(
   table: LookupTable,
   id: string,
   name: string,
-  path: string
+  path: string,
+  extra?: Record<string, unknown>
 ): Promise<LookupFormState> {
   const centreAdmin = await requireRole("centre_admin");
   const trimmed = name.trim();
@@ -54,7 +56,7 @@ export async function renameLookupItem(
   const supabase = await createClient();
   const { error } = await supabase
     .from(table)
-    .update({ name: trimmed })
+    .update({ name: trimmed, ...extra })
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!);
 

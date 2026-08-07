@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
-import { computeFiveSScores } from "@/lib/five-s/scores";
+import { computeFiveSScores, getStaminaBenchmarkContext } from "@/lib/five-s/scores";
 import { FiveSPlaceholder } from "@/components/profile/five-s-placeholder";
 import { FiveSRadarSection, FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 import { FIVE_S_CATEGORY_META } from "@/lib/five-s/categories";
@@ -60,7 +60,7 @@ export async function FiveSResultsView({
     getFiveSTests(),
     supabase
       .from("five_s_results")
-      .select("test_id, score, vo2_max, remarks, recorded_at, previous_score")
+      .select("test_id, score, level, shuttle, vo2_max, remarks, recorded_at, previous_score")
       .eq("player_id", playerId),
     supabase.from("five_s_category_notes").select("category, remarks").eq("player_id", playerId),
     supabase.from("five_s_group_notes").select("category, group_name, remarks").eq("player_id", playerId),
@@ -88,6 +88,9 @@ export async function FiveSResultsView({
   const categories = [...new Set(tests.map((t) => t.category))];
   const questionCategories = [...new Set(questions.map((q) => q.category))];
 
+  const staminaTestIds = tests.filter((t) => t.category === "stamina").map((t) => t.id);
+  const staminaContext = await getStaminaBenchmarkContext(supabase, playerId, staminaTestIds);
+
   const {
     current: currentScores,
     previous: previousScores,
@@ -97,7 +100,8 @@ export async function FiveSResultsView({
     tests,
     questions,
     resultByTest,
-    responseByQuestion
+    responseByQuestion,
+    staminaContext
   );
 
   return (
@@ -143,7 +147,11 @@ export async function FiveSResultsView({
                             <p className="mb-1.5 text-sm font-medium text-foreground">{test.name}</p>
                             <div className="flex min-h-9 items-center justify-between rounded-lg bg-muted/60 px-3 py-1.5 text-sm">
                               <span className={result ? "text-foreground" : "text-muted-foreground"}>
-                                {result ? `${result.score} ${test.unit}`.trim() : "Not recorded yet"}
+                                {result
+                                  ? test.unit === "level"
+                                    ? `Level ${result.level} / Shuttle ${result.shuttle}`
+                                    : `${result.score} ${test.unit}`.trim()
+                                  : "Not recorded yet"}
                               </span>
                               {result && (
                                 <span className="text-xs text-muted-foreground">

@@ -53,7 +53,9 @@ export default async function Coach5sModelStrengthPage({
   ]);
   const tests = allTests.filter((t) => t.category === "strength");
 
-  const existingScores = new Map((results ?? []).map((r) => [r.test_id, r.score]));
+  const existingScores = new Map(
+    (results ?? []).flatMap((r) => (r.score != null ? [[r.test_id, r.score] as const] : []))
+  );
 
   return (
     <div className="space-y-6">

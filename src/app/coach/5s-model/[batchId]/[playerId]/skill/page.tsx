@@ -64,7 +64,9 @@ export default async function Coach5sModelSkillPage({
   ]);
   const tests = allTests.filter((t) => t.category === "skill");
 
-  const existingScores = new Map((results ?? []).map((r) => [r.test_id, r.score]));
+  const existingScores = new Map(
+    (results ?? []).flatMap((r) => (r.score != null ? [[r.test_id, r.score] as const] : []))
+  );
   const existingGroupRemarks = new Map((groupNotes ?? []).map((n) => [n.group_name, n.remarks]));
 
   return (
