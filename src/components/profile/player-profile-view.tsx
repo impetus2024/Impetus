@@ -20,6 +20,7 @@ export type PlayerProfileViewValues = {
   medicalCondition: string | null;
   foodAllergy: string | null;
   aiffNumber: string | null;
+  additionalBatchIds: string[];
 };
 
 export function PlayerProfileView({
@@ -49,6 +50,14 @@ export function PlayerProfileView({
       <ViewField label="Program Type" value={lookup(playerTypes, values.playerTypeId)} />
       <ViewField label="Package" value={lookup(packages, values.packageId)} />
       <ViewField label="Batch Allotment" value={lookup(batches, values.batchId)} />
+      <ViewField
+        label="Additional Batches"
+        value={
+          values.additionalBatchIds.length > 0
+            ? values.additionalBatchIds.map((id) => lookup(batches, id)).filter(Boolean).join(", ")
+            : undefined
+        }
+      />
       <ViewField label="Gender" value={values.gender} />
       <ViewField label="Blood Group" value={values.bloodGroup} />
       <ViewField label="Height (cm)" value={values.heightCm} />

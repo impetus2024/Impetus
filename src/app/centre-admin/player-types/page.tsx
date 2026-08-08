@@ -24,7 +24,7 @@ export default async function PlayerTypesPage() {
       .order("name"),
     supabase
       .from("age_categories")
-      .select("id, name, is_active")
+      .select("id, name, is_active, age")
       .eq("centre_id", centreAdmin.centre_id!)
       .order("name"),
   ]);
@@ -56,6 +56,7 @@ export default async function PlayerTypesPage() {
             renameAction={renameAgeCategory}
             toggleAction={setAgeCategoryActive}
             canEdit={canEdit}
+            showAge
           />
         </TabsContent>
       </Tabs>

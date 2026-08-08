@@ -25,7 +25,10 @@ export const SUPER_ADMIN_NAV: NavGroup[] = [
   { items: [{ href: "/super-admin", label: "Dashboard", icon: LayoutDashboard }] },
   {
     label: "Management",
-    items: [{ href: "/super-admin/centres", label: "Centre Management", icon: Building2 }],
+    items: [
+      { href: "/super-admin/centres", label: "Centre Management", icon: Building2 },
+      { href: "/super-admin/5s-model", label: "5S Model", icon: Sparkles },
+    ],
   },
   {
     label: "Content",

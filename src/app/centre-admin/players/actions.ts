@@ -40,6 +40,7 @@ const PlayerSchema = z.object({
   customAmount: z.coerce.number().optional(),
   customDiscount: z.coerce.number().optional(),
   batchId: z.string().min(1, { error: "Batch allotment is required." }),
+  additionalBatchIds: z.array(z.string()).default([]),
   gender: z.string().min(1, { error: "Gender is required." }),
   bloodGroup: z.string().min(1, { error: "Blood group is required." }),
   heightCm: z.coerce.number({ error: "Height is required." }),
@@ -77,6 +78,7 @@ function parsePlayer(formData: FormData) {
     customAmount: optionalStr(formData.get("customAmount")),
     customDiscount: optionalStr(formData.get("customDiscount")),
     batchId: optionalStr(formData.get("batchId")),
+    additionalBatchIds: formData.getAll("additionalBatchIds").map(String).filter(Boolean),
     gender: optionalStr(formData.get("gender")),
     bloodGroup: optionalStr(formData.get("bloodGroup")),
     heightCm: optionalStr(formData.get("heightCm")),
@@ -124,6 +126,40 @@ async function resolveParentProfileId(email: string, fullName: string) {
   });
 
   return user.id;
+}
+
+// Replaces a player's full batch membership (primary batch + any additional
+// ones) with the given set. Called after every write that touches batch_id
+// so player_batches — the table coach-facing RLS actually checks — never
+// drifts from what the admin last saved. Best-effort: a failure here
+// doesn't fail the player save (same reasoning as the parent-link failure
+// below — the player record is the source of truth and this is
+// re-attempted on every subsequent save).
+async function syncPlayerBatches(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playerId: string,
+  centreId: string,
+  batchIds: (string | null | undefined)[]
+) {
+  const uniqueBatchIds = Array.from(new Set(batchIds.filter((id): id is string => Boolean(id))));
+
+  const { error: deleteError } = await supabase
+    .from("player_batches")
+    .delete()
+    .eq("player_id", playerId);
+  if (deleteError) {
+    logError(`Failed to sync batches for player ${playerId}:`, deleteError);
+    return;
+  }
+
+  if (uniqueBatchIds.length === 0) return;
+
+  const { error: insertError } = await supabase.from("player_batches").insert(
+    uniqueBatchIds.map((batchId) => ({ player_id: playerId, batch_id: batchId, centre_id: centreId }))
+  );
+  if (insertError) {
+    logError(`Failed to sync batches for player ${playerId}:`, insertError);
+  }
 }
 
 const CUSTOM_PACKAGE_VALUE = "custom";
@@ -298,6 +334,11 @@ export async function createPlayer(
     return { error: "Failed to create player." };
   }
 
+  await syncPlayerBatches(supabase, player.id, centreAdmin.centre_id!, [
+    d.batchId,
+    ...d.additionalBatchIds,
+  ]);
+
   try {
     const parentProfileId = await resolveParentProfileId(
       d.parentEmail,
@@ -416,6 +457,8 @@ export async function updatePlayer(
     return { error: "Failed to save player." };
   }
 
+  await syncPlayerBatches(supabase, id, centreAdmin.centre_id!, [d.batchId, ...d.additionalBatchIds]);
+
   if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 
   revalidatePath(PATH);
@@ -435,6 +478,7 @@ const PlayerProfileSchema = z.object({
   customAmount: z.coerce.number().optional(),
   customDiscount: z.coerce.number().optional(),
   batchId: z.string().optional(),
+  additionalBatchIds: z.array(z.string()).default([]),
   gender: z.string().optional(),
   bloodGroup: z.string().optional(),
   heightCm: z.coerce.number().optional(),
@@ -465,6 +509,7 @@ export async function updatePlayerProfile(
     customAmount: optionalStr(formData.get("customAmount")),
     customDiscount: optionalStr(formData.get("customDiscount")),
     batchId: optionalStr(formData.get("batchId")),
+    additionalBatchIds: formData.getAll("additionalBatchIds").map(String).filter(Boolean),
     gender: optionalStr(formData.get("gender")),
     bloodGroup: optionalStr(formData.get("bloodGroup")),
     heightCm: optionalStr(formData.get("heightCm")),
@@ -552,6 +597,8 @@ export async function updatePlayerProfile(
     logError(`Failed to save player profile ${id}:`, error);
     return { error: "Failed to save player profile." };
   }
+
+  await syncPlayerBatches(supabase, id, centreAdmin.centre_id!, [d.batchId, ...d.additionalBatchIds]);
 
   if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 

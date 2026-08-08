@@ -101,11 +101,16 @@ export default async function PlayerDetailPage({
         .order("name"),
     ]);
 
-  const [ageCategoryOptions, playerTypeOptions, batchOptions] = await Promise.all([
+  const [ageCategoryOptions, playerTypeOptions, batchOptions, { data: playerBatches }] = await Promise.all([
     ensureOptionIncluded(supabase, "age_categories", ageCategories ?? [], player.age_category_id),
     ensureOptionIncluded(supabase, "player_types", playerTypes ?? [], player.player_type_id),
     ensureOptionIncluded(supabase, "batches", batches ?? [], player.batch_id),
+    supabase.from("player_batches").select("batch_id").eq("player_id", id),
   ]);
+
+  const additionalBatchIds = (playerBatches ?? [])
+    .map((pb) => pb.batch_id)
+    .filter((batchId) => batchId !== player.batch_id);
 
   let packageOptions: PackageOption[] = (packagesRaw ?? []).map((p) => ({
     id: p.id,
@@ -215,6 +220,7 @@ export default async function PlayerDetailPage({
                   playerTypeId: player.player_type_id,
                   packageId: player.package_id,
                   batchId: player.batch_id,
+                  additionalBatchIds,
                   gender: player.gender,
                   bloodGroup: player.blood_group,
                   heightCm: player.height_cm,

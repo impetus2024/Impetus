@@ -35,9 +35,9 @@ export default async function Coach5sModelPlayerHubPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name, age_categories(name)")
+    .select("id, name, age_categories(name), player_batches!inner(batch_id)")
     .eq("id", playerId)
-    .eq("batch_id", batchId)
+    .eq("player_batches.batch_id", batchId)
     .maybeSingle();
 
   if (!player) notFound();

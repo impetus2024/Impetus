@@ -17,6 +17,7 @@ export function SkillScoreForm({
   existingScores,
   existingGroupRemarks,
   overallRemarks,
+  lockedTestIds,
 }: {
   batchId: string;
   playerId: string;
@@ -24,6 +25,7 @@ export function SkillScoreForm({
   existingScores: Map<string, number>;
   existingGroupRemarks: Map<string, string>;
   overallRemarks: string;
+  lockedTestIds: Set<string>;
 }) {
   const groups: { label: string; tests: Test[] }[] = [];
   for (const test of tests) {
@@ -52,24 +54,35 @@ export function SkillScoreForm({
           <h2 className="text-lg font-semibold">{group.label}</h2>
           <div className="grid gap-8 lg:grid-cols-2">
             <div className="space-y-5">
-              {group.tests.map((test) => (
-                <Field key={test.id}>
-                  <FieldLabel htmlFor={`score_${test.id}`}>
-                    {test.is_required && <span className="text-destructive">*</span>} {test.name}
-                  </FieldLabel>
-                  <Input
-                    id={`score_${test.id}`}
-                    name={`score_${test.id}`}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Rating"
-                    defaultValue={existingScores.get(test.id) ?? ""}
-                    required={test.is_required}
-                    className="max-w-md"
-                  />
-                </Field>
-              ))}
+              {group.tests.map((test) => {
+                const locked = lockedTestIds.has(test.id);
+                return (
+                  <Field key={test.id}>
+                    <FieldLabel htmlFor={`score_${test.id}`}>
+                      {test.is_required && !locked && <span className="text-destructive">*</span>} {test.name}
+                    </FieldLabel>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id={`score_${test.id}`}
+                        name={`score_${test.id}`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Rating"
+                        defaultValue={existingScores.get(test.id) ?? ""}
+                        required={test.is_required && !locked}
+                        disabled={locked}
+                        className="max-w-md"
+                      />
+                      {locked && (
+                        <span className="text-sm text-muted-foreground">
+                          Already recorded by another coach — locked
+                        </span>
+                      )}
+                    </div>
+                  </Field>
+                );
+              })}
             </div>
             <Field>
               <FieldLabel htmlFor={`remarks_group_${groupIndex}`}>

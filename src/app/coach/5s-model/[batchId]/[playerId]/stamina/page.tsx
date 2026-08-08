@@ -30,9 +30,9 @@ export default async function Coach5sModelStaminaPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name")
+    .select("id, name, player_batches!inner(batch_id)")
     .eq("id", playerId)
-    .eq("batch_id", batchId)
+    .eq("player_batches.batch_id", batchId)
     .maybeSingle();
 
   if (!player) notFound();
@@ -48,7 +48,7 @@ export default async function Coach5sModelStaminaPage({
     getFiveSTests(),
     supabase
       .from("five_s_results")
-      .select("test_id, score, vo2_max, remarks")
+      .select("test_id, score, level, shuttle, vo2_max, remarks, recorded_by")
       .eq("player_id", playerId),
     supabase
       .from("five_s_category_notes")
@@ -60,6 +60,9 @@ export default async function Coach5sModelStaminaPage({
   const tests = allTests.filter((t) => t.category === "stamina");
 
   const existingByTest = new Map((results ?? []).map((r) => [r.test_id, r]));
+  const lockedTestIds = new Set(
+    (results ?? []).filter((r) => r.recorded_by !== coach.id).map((r) => r.test_id)
+  );
 
   return (
     <div className="space-y-6">
@@ -88,6 +91,7 @@ export default async function Coach5sModelStaminaPage({
               tests={tests}
               existingByTest={existingByTest}
               overallRemarks={note?.remarks ?? ""}
+              lockedTestIds={lockedTestIds}
             />
           </CardContent>
         </Card>

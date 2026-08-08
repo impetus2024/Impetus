@@ -6,7 +6,12 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { isFiveSWindowOpen } from "@/lib/five-s/testing-window";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
+import { vo2MaxFromBeepTest, vo2MaxFromCooperTest } from "@/lib/five-s/vo2-max";
 import { logError } from "@/lib/logger";
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 // Shared by every score/response-submitting action below — score entry
 // (not publishing) only happens while the centre admin's 5S testing
@@ -25,6 +30,28 @@ async function assertTestingWindowOpen(
     return "The 5S testing window is closed. Contact your centre admin.";
   }
   return null;
+}
+
+// A test is frozen once any coach has recorded it — see the split
+// five_s_results RLS policies in the player_batches migration. Re-checked
+// here (not just left to RLS) because a multi-row upsert is one SQL
+// statement: if RLS rejected even one locked row inside it, Postgres would
+// fail the whole statement, blocking the coach's other, legitimately-own
+// rows too. Filtering locked test ids out before the upsert keeps a
+// same-submission mix of own/locked tests from failing entirely.
+async function getLockedTestIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playerId: string,
+  coachId: string,
+  testIds: string[]
+): Promise<Set<string>> {
+  if (testIds.length === 0) return new Set();
+  const { data } = await supabase
+    .from("five_s_results")
+    .select("test_id, recorded_by")
+    .eq("player_id", playerId)
+    .in("test_id", testIds);
+  return new Set((data ?? []).filter((r) => r.recorded_by !== coachId).map((r) => r.test_id));
 }
 
 export type SpeedScoresFormState = { error?: string } | undefined;
@@ -57,6 +84,12 @@ export async function submitSpeedScores(
     return { error: windowError };
   }
 
+  const submittedTestIds: string[] = [];
+  for (const [key] of formData.entries()) {
+    if (key.startsWith("score_")) submittedTestIds.push(key.slice("score_".length));
+  }
+  const lockedTestIds = await getLockedTestIds(supabase, playerId, coach.id, submittedTestIds);
+
   const rows: {
     player_id: string;
     test_id: string;
@@ -68,6 +101,7 @@ export async function submitSpeedScores(
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("score_")) continue;
     const testId = key.slice("score_".length);
+    if (lockedTestIds.has(testId)) continue;
     const score = Number(value);
     if (!Number.isFinite(score) || score <= 0) {
       return { error: "Enter a valid score for every test." };
@@ -125,6 +159,12 @@ export async function submitStrengthScores(
     return { error: windowError };
   }
 
+  const submittedTestIds: string[] = [];
+  for (const [key] of formData.entries()) {
+    if (key.startsWith("score_")) submittedTestIds.push(key.slice("score_".length));
+  }
+  const lockedTestIds = await getLockedTestIds(supabase, playerId, coach.id, submittedTestIds);
+
   const rows: {
     player_id: string;
     test_id: string;
@@ -136,6 +176,7 @@ export async function submitStrengthScores(
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("score_")) continue;
     const testId = key.slice("score_".length);
+    if (lockedTestIds.has(testId)) continue;
     const score = Number(value);
     if (!Number.isFinite(score) || score <= 0) {
       return { error: "Enter a valid score for every test." };
@@ -171,7 +212,7 @@ export type StaminaScoresFormState = { error?: string } | undefined;
 export async function submitStaminaScores(
   batchId: string,
   playerId: string,
-  testIds: string[],
+  tests: { id: string; unit: string }[],
   _prev: StaminaScoresFormState,
   formData: FormData
 ): Promise<StaminaScoresFormState> {
@@ -194,40 +235,68 @@ export async function submitStaminaScores(
     return { error: windowError };
   }
 
+  const lockedTestIds = await getLockedTestIds(
+    supabase,
+    playerId,
+    coach.id,
+    tests.map((t) => t.id)
+  );
+
   const rows: {
     player_id: string;
     test_id: string;
     centre_id: string;
-    score: number;
+    score: number | null;
+    level: number | null;
+    shuttle: number | null;
     vo2_max: number;
     remarks: string;
     recorded_by: string;
   }[] = [];
 
-  for (const testId of testIds) {
-    const score = Number(formData.get(`score_${testId}`));
-    const vo2Max = Number(formData.get(`vo2max_${testId}`));
-    const remarks = String(formData.get(`remarks_${testId}` ) ?? "").trim();
-
-    if (!Number.isFinite(score) || score <= 0) {
-      return { error: "Enter a valid score for every test." };
-    }
-    if (!Number.isFinite(vo2Max) || vo2Max <= 0) {
-      return { error: "Enter a valid VO2 Max for every test." };
-    }
+  // VO2 Max is never read from the form — it's always recomputed here from
+  // the coach's raw score, the one source of truth (see vo2-max.ts).
+  for (const test of tests) {
+    if (lockedTestIds.has(test.id)) continue;
+    const remarks = String(formData.get(`remarks_${test.id}`) ?? "").trim();
     if (!remarks) {
       return { error: "Remarks are required for every test." };
     }
 
-    rows.push({
-      player_id: playerId,
-      test_id: testId,
-      centre_id: batch.centre_id,
-      score,
-      vo2_max: vo2Max,
-      remarks,
-      recorded_by: coach.id,
-    });
+    if (test.unit === "level") {
+      const level = Number(formData.get(`level_${test.id}`));
+      const shuttle = Number(formData.get(`shuttle_${test.id}`));
+      if (!Number.isInteger(level) || level < 0 || !Number.isInteger(shuttle) || shuttle < 0) {
+        return { error: "Enter a valid Level and Shuttle for every test." };
+      }
+      rows.push({
+        player_id: playerId,
+        test_id: test.id,
+        centre_id: batch.centre_id,
+        score: null,
+        level,
+        shuttle,
+        vo2_max: round2(vo2MaxFromBeepTest(level, shuttle)),
+        remarks,
+        recorded_by: coach.id,
+      });
+    } else {
+      const score = Number(formData.get(`score_${test.id}`));
+      if (!Number.isFinite(score) || score <= 0) {
+        return { error: "Enter a valid score for every test." };
+      }
+      rows.push({
+        player_id: playerId,
+        test_id: test.id,
+        centre_id: batch.centre_id,
+        score,
+        level: null,
+        shuttle: null,
+        vo2_max: round2(vo2MaxFromCooperTest(score)),
+        remarks,
+        recorded_by: coach.id,
+      });
+    }
   }
 
   const overallRemarks = String(formData.get("overall_remarks") ?? "").trim();
@@ -235,9 +304,9 @@ export async function submitStaminaScores(
     return { error: "Overall remarks are required." };
   }
 
-  const { error: resultsError } = await supabase
-    .from("five_s_results")
-    .upsert(rows, { onConflict: "player_id,test_id" });
+  const { error: resultsError } = rows.length > 0
+    ? await supabase.from("five_s_results").upsert(rows, { onConflict: "player_id,test_id" })
+    : { error: null };
 
   if (resultsError) {
     logError(`Failed to save stamina scores for player ${playerId}:`, resultsError);
@@ -359,6 +428,13 @@ export async function submitSkillScores(
     return { error: windowError };
   }
 
+  const lockedTestIds = await getLockedTestIds(
+    supabase,
+    playerId,
+    coach.id,
+    groups.flatMap((g) => g.testIds)
+  );
+
   const resultRows: {
     player_id: string;
     test_id: string;
@@ -380,6 +456,7 @@ export async function submitSkillScores(
     const group = groups[i];
 
     for (const testId of group.testIds) {
+      if (lockedTestIds.has(testId)) continue;
       const raw = formData.get(`score_${testId}`);
       const isRequired = group.requiredTestIds.includes(testId);
 
@@ -474,9 +551,9 @@ export async function publishFiveSReport(
 
   const { data: player } = await supabase
     .from("players")
-    .select("id")
+    .select("id, player_batches!inner(batch_id)")
     .eq("id", playerId)
-    .eq("batch_id", batchId)
+    .eq("player_batches.batch_id", batchId)
     .maybeSingle();
 
   if (!player) {

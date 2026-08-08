@@ -48,8 +48,8 @@ export default async function CoachBatchAttendancePage({
         .maybeSingle(),
       supabase
         .from("players")
-        .select("id, name")
-        .eq("batch_id", batchId)
+        .select("id, name, player_batches!inner(batch_id)")
+        .eq("player_batches.batch_id", batchId)
         .eq("is_active", true)
         .order("name"),
       supabase

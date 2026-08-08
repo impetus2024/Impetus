@@ -30,9 +30,9 @@ export default async function Coach5sModelSpiritPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name")
+    .select("id, name, player_batches!inner(batch_id)")
     .eq("id", playerId)
-    .eq("batch_id", batchId)
+    .eq("player_batches.batch_id", batchId)
     .maybeSingle();
 
   if (!player) notFound();

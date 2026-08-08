@@ -30,9 +30,9 @@ export default async function Coach5sModelStrengthPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name")
+    .select("id, name, player_batches!inner(batch_id)")
     .eq("id", playerId)
-    .eq("batch_id", batchId)
+    .eq("player_batches.batch_id", batchId)
     .maybeSingle();
 
   if (!player) notFound();
@@ -48,12 +48,17 @@ export default async function Coach5sModelStrengthPage({
     getFiveSTests(),
     supabase
       .from("five_s_results")
-      .select("test_id, score")
+      .select("test_id, score, recorded_by")
       .eq("player_id", playerId),
   ]);
   const tests = allTests.filter((t) => t.category === "strength");
 
-  const existingScores = new Map((results ?? []).map((r) => [r.test_id, r.score]));
+  const existingScores = new Map(
+    (results ?? []).flatMap((r) => (r.score != null ? [[r.test_id, r.score] as const] : []))
+  );
+  const lockedTestIds = new Set(
+    (results ?? []).filter((r) => r.recorded_by !== coach.id).map((r) => r.test_id)
+  );
 
   return (
     <div className="space-y-6">
@@ -81,6 +86,7 @@ export default async function Coach5sModelStrengthPage({
               playerId={playerId}
               tests={tests}
               existingScores={existingScores}
+              lockedTestIds={lockedTestIds}
             />
           </CardContent>
         </Card>

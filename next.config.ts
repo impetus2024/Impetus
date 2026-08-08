@@ -18,6 +18,14 @@ function buildCsp() {
       // malformed env var — ignore rather than crash the build over it
     }
   }
+  // Private objects (profile pictures, Aadhaar, medical records, staff
+  // docs) are served as short-lived signed URLs straight off R2's S3 API
+  // endpoint (see getSignedFileUrl in r2.ts), not through R2_PUBLIC_URL —
+  // that's a different origin and needs its own allow-list entry, or every
+  // <img> pointed at a signed URL gets silently blocked by img-src.
+  if (process.env.R2_ACCOUNT_ID) {
+    imgSrc.push(`https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);
+  }
 
   return [
     `default-src 'self'`,

@@ -51,14 +51,14 @@ export async function markAttendance(
   // checking here first gives a clear error instead of a bulk upsert
   // silently dropping the disallowed rows.
   const { data: batchPlayers } = await supabase
-    .from("players")
-    .select("id")
+    .from("player_batches")
+    .select("player_id")
     .eq("batch_id", batchId)
     .in(
-      "id",
+      "player_id",
       submitted.map((s) => s.playerId)
     );
-  const validPlayerIds = new Set((batchPlayers ?? []).map((p) => p.id));
+  const validPlayerIds = new Set((batchPlayers ?? []).map((p) => p.player_id));
   if (submitted.some((s) => !validPlayerIds.has(s.playerId))) {
     return { error: "One or more players are not in this batch." };
   }
