@@ -158,6 +158,10 @@ async function PlayerProfileSections({
                 playerTypeId: player.player_type_id,
                 packageId: player.package_id,
                 batchId: player.batch_id,
+                // Parents only ever see the primary batch (see the
+                // player_batches migration's RLS — the parent role has no
+                // read access to it), so this is intentionally always empty.
+                additionalBatchIds: [],
                 gender: player.gender,
                 bloodGroup: player.blood_group,
                 heightCm: player.height_cm,

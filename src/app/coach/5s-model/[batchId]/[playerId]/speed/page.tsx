@@ -30,9 +30,9 @@ export default async function Coach5sModelSpeedPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name")
+    .select("id, name, player_batches!inner(batch_id)")
     .eq("id", playerId)
-    .eq("batch_id", batchId)
+    .eq("player_batches.batch_id", batchId)
     .maybeSingle();
 
   if (!player) notFound();
@@ -48,13 +48,19 @@ export default async function Coach5sModelSpeedPage({
     getFiveSTests(),
     supabase
       .from("five_s_results")
-      .select("test_id, score")
+      .select("test_id, score, recorded_by")
       .eq("player_id", playerId),
   ]);
   const tests = allTests.filter((t) => t.category === "speed");
 
   const existingScores = new Map(
     (results ?? []).flatMap((r) => (r.score != null ? [[r.test_id, r.score] as const] : []))
+  );
+  // A test already recorded by a coach from the player's other batch is
+  // frozen — see the RLS split in the player_batches migration. Only the
+  // coach who first recorded it may still edit.
+  const lockedTestIds = new Set(
+    (results ?? []).filter((r) => r.recorded_by !== coach.id).map((r) => r.test_id)
   );
 
   return (
@@ -83,6 +89,7 @@ export default async function Coach5sModelSpeedPage({
               playerId={playerId}
               tests={tests}
               existingScores={existingScores}
+              lockedTestIds={lockedTestIds}
             />
           </CardContent>
         </Card>

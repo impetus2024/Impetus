@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -38,6 +39,7 @@ export type PlayerDefaultValues = {
   playerTypeId: string | null;
   packageId: string | null;
   batchId: string | null;
+  additionalBatchIds?: string[];
   gender: string | null;
   bloodGroup: string | null;
   heightCm: number | null;
@@ -237,6 +239,28 @@ export function PlayerForm({
                     ))}
                   </SelectContent>
                 </Select>
+              </Field>
+              <Field className="sm:col-span-2">
+                <FieldLabel>Additional Batches</FieldLabel>
+                <FieldDescription>
+                  Optional — enroll this player in other batches too. Each batch keeps its own
+                  coach, attendance calendar, and 5S testing.
+                </FieldDescription>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  {batches.map((o) => (
+                    <Field key={o.id} orientation="horizontal" className="w-fit gap-1.5">
+                      <Checkbox
+                        name="additionalBatchIds"
+                        value={o.id}
+                        id={`additionalBatch-${o.id}`}
+                        defaultChecked={defaultValues?.additionalBatchIds?.includes(o.id)}
+                      />
+                      <FieldLabel htmlFor={`additionalBatch-${o.id}`} className="font-normal">
+                        {o.name}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </div>
               </Field>
               <Field>
                 <FieldLabel htmlFor="bloodGroup">

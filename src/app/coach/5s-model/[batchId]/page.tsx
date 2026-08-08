@@ -34,8 +34,8 @@ export default async function Coach5sModelBatchPage({
 
   const { data: players } = await supabase
     .from("players")
-    .select("id, name")
-    .eq("batch_id", batchId)
+    .select("id, name, player_batches!inner(batch_id)")
+    .eq("player_batches.batch_id", batchId)
     .eq("is_active", true)
     .order("name");
 

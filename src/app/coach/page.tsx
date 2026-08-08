@@ -38,15 +38,19 @@ export default async function CoachDashboard() {
 
   const batchIds = (batches ?? []).map((b) => b.id);
 
+  // A coach who heads more than one batch can have the same player show up
+  // in several of them (player enrolled in multiple batches) — the
+  // player_batches!inner join returns one row per (player, batch) match, so
+  // dedupe before counting "Total Players".
   const { data: batchPlayers } = batchIds.length
     ? await supabase
         .from("players")
-        .select("id")
-        .in("batch_id", batchIds)
+        .select("id, player_batches!inner(batch_id)")
+        .in("player_batches.batch_id", batchIds)
         .eq("is_active", true)
     : { data: [] as { id: string }[] };
 
-  const playerIds = (batchPlayers ?? []).map((p) => p.id);
+  const playerIds = [...new Set((batchPlayers ?? []).map((p) => p.id))];
 
   const [todayAttendance, injuries, weekAttendance] = await Promise.all([
     batchIds.length

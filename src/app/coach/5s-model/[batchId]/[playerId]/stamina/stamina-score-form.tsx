@@ -25,7 +25,15 @@ type ExistingResult = {
 // it's a live preview computed from whichever raw fields are filled in, and
 // has no `name` attribute so it's never submitted: the server recomputes it
 // authoritatively from the same raw score in submitStaminaScores.
-function StaminaTestFields({ test, existing }: { test: Test; existing?: ExistingResult }) {
+function StaminaTestFields({
+  test,
+  existing,
+  locked,
+}: {
+  test: Test;
+  existing?: ExistingResult;
+  locked: boolean;
+}) {
   const isBeepTest = test.unit === "level";
 
   const [level, setLevel] = useState(existing?.level != null ? String(existing.level) : "");
@@ -50,7 +58,7 @@ function StaminaTestFields({ test, existing }: { test: Test; existing?: Existing
         <>
           <Field>
             <FieldLabel htmlFor={`level_${test.id}`}>
-              <span className="text-destructive">*</span> Level:
+              {!locked && <span className="text-destructive">*</span>} Level:
             </FieldLabel>
             <Input
               id={`level_${test.id}`}
@@ -61,12 +69,13 @@ function StaminaTestFields({ test, existing }: { test: Test; existing?: Existing
               placeholder="Level"
               value={level}
               onChange={(e) => setLevel(e.target.value)}
-              required
+              required={!locked}
+              disabled={locked}
             />
           </Field>
           <Field>
             <FieldLabel htmlFor={`shuttle_${test.id}`}>
-              <span className="text-destructive">*</span> Shuttle:
+              {!locked && <span className="text-destructive">*</span>} Shuttle:
             </FieldLabel>
             <Input
               id={`shuttle_${test.id}`}
@@ -77,14 +86,15 @@ function StaminaTestFields({ test, existing }: { test: Test; existing?: Existing
               placeholder="Shuttle"
               value={shuttle}
               onChange={(e) => setShuttle(e.target.value)}
-              required
+              required={!locked}
+              disabled={locked}
             />
           </Field>
         </>
       ) : (
         <Field>
           <FieldLabel htmlFor={`score_${test.id}`}>
-            <span className="text-destructive">*</span> Score:
+            {!locked && <span className="text-destructive">*</span>} Score:
           </FieldLabel>
           <Input
             id={`score_${test.id}`}
@@ -95,7 +105,8 @@ function StaminaTestFields({ test, existing }: { test: Test; existing?: Existing
             placeholder="Score"
             value={score}
             onChange={(e) => setScore(e.target.value)}
-            required
+            required={!locked}
+            disabled={locked}
           />
         </Field>
       )}
@@ -120,12 +131,14 @@ export function StaminaScoreForm({
   tests,
   existingByTest,
   overallRemarks,
+  lockedTestIds,
 }: {
   batchId: string;
   playerId: string;
   tests: Test[];
   existingByTest: Map<string, ExistingResult>;
   overallRemarks: string;
+  lockedTestIds: Set<string>;
 }) {
   const action = submitStaminaScores.bind(
     null,
@@ -139,34 +152,42 @@ export function StaminaScoreForm({
     <form action={formAction} className="space-y-8">
       {tests.map((test) => {
         const existing = existingByTest.get(test.id);
+        const locked = lockedTestIds.has(test.id);
         return (
           <div key={test.id} className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">{test.name}</h2>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Info className="size-4" /> European Standard Scores
-                    </span>
-                  }
-                />
-                <TooltipContent>Compared against European standard benchmarks for this age group.</TooltipContent>
-              </Tooltip>
+              {locked ? (
+                <span className="text-sm text-muted-foreground">
+                  Already recorded by another coach — locked
+                </span>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Info className="size-4" /> European Standard Scores
+                      </span>
+                    }
+                  />
+                  <TooltipContent>Compared against European standard benchmarks for this age group.</TooltipContent>
+                </Tooltip>
+              )}
             </div>
 
-            <StaminaTestFields test={test} existing={existing} />
+            <StaminaTestFields test={test} existing={existing} locked={locked} />
 
             <Field>
               <FieldLabel htmlFor={`remarks_${test.id}`}>
-                <span className="text-destructive">*</span> Remarks:
+                {!locked && <span className="text-destructive">*</span>} Remarks:
               </FieldLabel>
               <Textarea
                 id={`remarks_${test.id}`}
                 name={`remarks_${test.id}`}
                 placeholder="Remarks"
                 defaultValue={existing?.remarks ?? ""}
-                required
+                required={!locked}
+                disabled={locked}
               />
             </Field>
           </div>

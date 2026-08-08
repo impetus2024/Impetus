@@ -33,8 +33,8 @@ export default async function CoachBatchPlayersPage({
 
   const { data: players } = await supabase
     .from("players")
-    .select("id, name, date_of_birth, gender, parent_contact_number")
-    .eq("batch_id", id)
+    .select("id, name, date_of_birth, gender, parent_contact_number, player_batches!inner(batch_id)")
+    .eq("player_batches.batch_id", id)
     .eq("is_active", true)
     .order("name");
 

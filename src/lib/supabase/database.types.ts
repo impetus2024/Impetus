@@ -1344,6 +1344,49 @@ export type Database = {
           },
         ]
       }
+      player_batches: {
+        Row: {
+          batch_id: string
+          centre_id: string
+          created_at: string
+          player_id: string
+        }
+        Insert: {
+          batch_id: string
+          centre_id: string
+          created_at?: string
+          player_id: string
+        }
+        Update: {
+          batch_id?: string
+          centre_id?: string
+          created_at?: string
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_batches_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_batches_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_batches_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       player_types: {
         Row: {
           centre_id: string
