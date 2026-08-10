@@ -29,8 +29,15 @@ function buildCsp() {
   // endpoint (see getSignedFileUrl in r2.ts), not through R2_PUBLIC_URL —
   // that's a different origin and needs its own allow-list entry, or every
   // <img> pointed at a signed URL gets silently blocked by img-src.
+  // getClient() never sets forcePathStyle, so the AWS SDK defaults to
+  // virtual-hosted-style addressing: the bucket name is prepended as its
+  // own subdomain (https://<bucket>.<account-id>.r2.cloudflarestorage.com),
+  // not appended as a path — a bare `<account-id>.r2.cloudflarestorage.com`
+  // entry doesn't match that origin at all. The leading `*.` wildcard covers
+  // any bucket under this account (R2_BUCKET_NAME, R2_PRIVATE_BUCKET_NAME,
+  // or any added later) without hard-coding bucket names into the CSP.
   if (process.env.R2_ACCOUNT_ID) {
-    imgSrc.push(`https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);
+    imgSrc.push(`https://*.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);
   }
 
   return [
