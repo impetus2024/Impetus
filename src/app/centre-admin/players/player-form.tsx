@@ -185,10 +185,8 @@ export function PlayerForm({
                 <Input id="email" name="email" type="email" defaultValue={defaultValues?.email ?? ""} className={FILLED_INPUT} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="contactNumber">
-                  Player Contact Number <Required />
-                </FieldLabel>
-                <Input id="contactNumber" name="contactNumber" defaultValue={defaultValues?.contactNumber ?? ""} className={FILLED_INPUT} required />
+                <FieldLabel htmlFor="contactNumber">Player Contact Number</FieldLabel>
+                <Input id="contactNumber" name="contactNumber" defaultValue={defaultValues?.contactNumber ?? ""} className={FILLED_INPUT} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="playerTypeId">
@@ -299,10 +297,8 @@ export function PlayerForm({
                 <Input id="aadhaarNumber" name="aadhaarNumber" placeholder={documentLinks ? "Leave blank to keep existing" : undefined} className={FILLED_INPUT} required />
               </Field>
               <Field>
-                <FieldLabel htmlFor="aadhaarDoc">
-                  Upload Aadhaar <Required />
-                </FieldLabel>
-                <FileInput id="aadhaarDoc" name="aadhaarDoc" required />
+                <FieldLabel htmlFor="aadhaarDoc">Upload Aadhaar</FieldLabel>
+                <FileInput id="aadhaarDoc" name="aadhaarDoc" />
                 {documentLinks?.aadhaar && (
                   <FieldDescription>
                     <a href={documentLinks.aadhaar} target="_blank" rel="noreferrer" className="underline">
@@ -323,10 +319,8 @@ export function PlayerForm({
                 )}
               </Field>
               <Field>
-                <FieldLabel htmlFor="profilePicture">
-                  Upload Profile Picture <Required />
-                </FieldLabel>
-                <FileInput id="profilePicture" name="profilePicture" accept="image/*" required />
+                <FieldLabel htmlFor="profilePicture">Upload Profile Picture</FieldLabel>
+                <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
                 {documentLinks?.profilePicture && (
                   <FieldDescription>
                     <a href={documentLinks.profilePicture} target="_blank" rel="noreferrer" className="underline">
@@ -417,10 +411,8 @@ export function PlayerForm({
                 <Input id="city" name="city" defaultValue={defaultValues?.city ?? ""} className={FILLED_INPUT} required />
               </Field>
               <Field>
-                <FieldLabel htmlFor="pincode">
-                  Pincode <Required />
-                </FieldLabel>
-                <Input id="pincode" name="pincode" defaultValue={defaultValues?.pincode ?? ""} className={FILLED_INPUT} required />
+                <FieldLabel htmlFor="pincode">Pincode</FieldLabel>
+                <Input id="pincode" name="pincode" defaultValue={defaultValues?.pincode ?? ""} className={FILLED_INPUT} />
               </Field>
             </FieldGroup>
 
