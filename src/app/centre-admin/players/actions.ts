@@ -23,18 +23,20 @@ function optionalStr(v: FormDataEntryValue | null) {
   return s ? s : undefined;
 }
 
-// Every field is mandatory except the ones explicitly kept optional below
-// (Player Email ID, Blood Group, Height, Weight, Birth Mark, Medical
-// Condition, Food Allergy, AIFF Number, Passport Number, Upload Medical
-// Records, Mother Name, Address Line 2) — mirrors the `required` attributes
-// in player-form.tsx, so a request that bypasses the client can't skip the
-// same validation.
+// Only Name, Date of Birth, Gender, Age Category, Program Type, Package,
+// Batch Allotment, Aadhaar Number, Father/Guardian Name, Parent/Guardian
+// Contact Number, Address Line 1, Country, State, and City are mandatory —
+// mirrors the `required` attributes in player-form.tsx, so a request that
+// bypasses the client can't skip the same validation. Parent/Guardian Email
+// stays required despite not being on that list: players.parent_email is a
+// NOT NULL column, and resolveParentProfileId depends on it to find-or-create
+// the parent's login.
 const PlayerSchema = z.object({
   name: z.string().min(1, { error: "Name is required." }),
   dateOfBirth: z.string().min(1, { error: "Date of birth is required." }),
   ageCategoryId: z.string().min(1, { error: "Age category is required." }),
   email: z.email({ error: "Enter a valid player email." }).optional(),
-  contactNumber: z.string().min(1, { error: "Player contact number is required." }),
+  contactNumber: z.string().optional(),
   playerTypeId: z.string().min(1, { error: "Program type is required." }),
   packageId: z.string().min(1, { error: "Package is required." }),
   customPackageName: z.string().optional(),
@@ -61,7 +63,7 @@ const PlayerSchema = z.object({
   country: z.string().min(1, { error: "Country is required." }),
   state: z.string().min(1, { error: "State is required." }),
   city: z.string().min(1, { error: "City is required." }),
-  pincode: z.string().min(1, { error: "Pincode is required." }),
+  pincode: z.string().optional(),
 });
 
 export type PlayerFormState = { error?: string } | undefined;
@@ -312,15 +314,6 @@ export async function createPlayer(
   const uploads = await uploadDocFields(formData, docFields, `player-documents/${crypto.randomUUID()}`, centreAdmin.id);
   if (uploads.error) {
     return { error: uploads.error };
-  }
-  // Client-side `required` on the file inputs can be bypassed by a direct
-  // request — uploadDocFields only reports a key here when a file actually
-  // came through, so this is the real, server-side check.
-  if (!uploads.values.aadhaar_doc_path) {
-    return { error: "Aadhaar document is required." };
-  }
-  if (!uploads.values.profile_picture_path) {
-    return { error: "Profile picture is required." };
   }
   Object.assign(insert, uploads.values);
 
