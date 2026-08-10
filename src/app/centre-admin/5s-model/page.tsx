@@ -34,7 +34,7 @@ export default async function CentreAdmin5sModelPage({
 
   let query = supabase
     .from("players")
-    .select("id, name, batches(name)", { count: "exact" })
+    .select("id, name, batches!players_batch_id_fkey(name)", { count: "exact" })
     .eq("centre_id", centreAdmin.centre_id!)
     .eq("is_active", true);
 

@@ -24,15 +24,16 @@ function optionalStr(v: FormDataEntryValue | null) {
 }
 
 // Every field is mandatory except the ones explicitly kept optional below
-// (Birth Mark, Medical Condition, Food Allergy, AIFF Number, Passport
-// Number, Upload Medical Records, Mother Name, Address Line 2) — mirrors
-// the `required` attributes in player-form.tsx, so a request that bypasses
-// the client can't skip the same validation.
+// (Player Email ID, Blood Group, Height, Weight, Birth Mark, Medical
+// Condition, Food Allergy, AIFF Number, Passport Number, Upload Medical
+// Records, Mother Name, Address Line 2) — mirrors the `required` attributes
+// in player-form.tsx, so a request that bypasses the client can't skip the
+// same validation.
 const PlayerSchema = z.object({
   name: z.string().min(1, { error: "Name is required." }),
   dateOfBirth: z.string().min(1, { error: "Date of birth is required." }),
   ageCategoryId: z.string().min(1, { error: "Age category is required." }),
-  email: z.email({ error: "Enter a valid player email." }),
+  email: z.email({ error: "Enter a valid player email." }).optional(),
   contactNumber: z.string().min(1, { error: "Player contact number is required." }),
   playerTypeId: z.string().min(1, { error: "Program type is required." }),
   packageId: z.string().min(1, { error: "Package is required." }),
@@ -42,9 +43,9 @@ const PlayerSchema = z.object({
   batchId: z.string().min(1, { error: "Batch allotment is required." }),
   additionalBatchIds: z.array(z.string()).default([]),
   gender: z.string().min(1, { error: "Gender is required." }),
-  bloodGroup: z.string().min(1, { error: "Blood group is required." }),
-  heightCm: z.coerce.number({ error: "Height is required." }),
-  weightKg: z.coerce.number({ error: "Weight is required." }),
+  bloodGroup: z.string().optional(),
+  heightCm: z.coerce.number().optional(),
+  weightKg: z.coerce.number().optional(),
   birthMark: z.string().optional(),
   medicalCondition: z.string().optional(),
   foodAllergy: z.string().optional(),
