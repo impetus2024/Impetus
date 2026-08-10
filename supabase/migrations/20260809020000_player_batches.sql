@@ -52,7 +52,7 @@ create policy "medical views own centre player_batches" on public.player_batches
 
 create policy "staff_finance views own centre player_batches" on public.player_batches
   for select using (
-    private.user_role() = any (array['staff', 'finance']) and centre_id = private.user_centre_id()
+    private.user_role() in ('staff', 'finance') and centre_id = private.user_centre_id()
   );
 
 grant select, insert, update, delete on public.player_batches to authenticated, service_role;

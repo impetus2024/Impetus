@@ -7,6 +7,12 @@ function buildCsp() {
   const connectSrc = ["'self'", "https://cloudflareinsights.com"];
   const imgSrc = ["'self'", "data:"];
   const scriptSrc = ["'self'", "'unsafe-inline'", "https://static.cloudflareinsights.com"];
+  // React's dev mode (hot reload, component-stack reconstruction) relies on
+  // eval() — never used in a production build. Scoped to non-production so
+  // the deployed CSP stays as strict as before.
+  if (process.env.NODE_ENV !== "production") {
+    scriptSrc.push("'unsafe-eval'");
+  }
 
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
     connectSrc.push(process.env.NEXT_PUBLIC_SUPABASE_URL);

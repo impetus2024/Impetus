@@ -34,7 +34,9 @@ export default async function PlayersPage({
 
   let query = supabase
     .from("players")
-    .select("id, name, date_of_birth, is_active, batches(name), player_types(name)", { count: "exact" })
+    .select("id, name, date_of_birth, is_active, batches!players_batch_id_fkey(name), player_types(name)", {
+      count: "exact",
+    })
     .eq("centre_id", centreAdmin.centre_id!);
 
   if (q) query = query.ilike("name", `%${q}%`);

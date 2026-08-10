@@ -18,7 +18,7 @@ export default async function CentreAdmin5sModelResultsPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name, batches(name)")
+    .select("id, name, batches!players_batch_id_fkey(name)")
     .eq("id", playerId)
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();

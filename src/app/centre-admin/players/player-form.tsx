@@ -181,10 +181,8 @@ export function PlayerForm({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="email">
-                  Player Email ID <Required />
-                </FieldLabel>
-                <Input id="email" name="email" type="email" defaultValue={defaultValues?.email ?? ""} className={FILLED_INPUT} required />
+                <FieldLabel htmlFor="email">Player Email ID</FieldLabel>
+                <Input id="email" name="email" type="email" defaultValue={defaultValues?.email ?? ""} className={FILLED_INPUT} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="contactNumber">
@@ -263,22 +261,16 @@ export function PlayerForm({
                 </div>
               </Field>
               <Field>
-                <FieldLabel htmlFor="bloodGroup">
-                  Blood Group <Required />
-                </FieldLabel>
-                <Input id="bloodGroup" name="bloodGroup" defaultValue={defaultValues?.bloodGroup ?? ""} className={FILLED_INPUT} required />
+                <FieldLabel htmlFor="bloodGroup">Blood Group</FieldLabel>
+                <Input id="bloodGroup" name="bloodGroup" defaultValue={defaultValues?.bloodGroup ?? ""} className={FILLED_INPUT} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="heightCm">
-                  Height (cm) <Required />
-                </FieldLabel>
-                <Input id="heightCm" name="heightCm" type="number" step="0.1" defaultValue={defaultValues?.heightCm ?? ""} className={FILLED_INPUT} required />
+                <FieldLabel htmlFor="heightCm">Height (cm)</FieldLabel>
+                <Input id="heightCm" name="heightCm" type="number" step="0.1" defaultValue={defaultValues?.heightCm ?? ""} className={FILLED_INPUT} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="weightKg">
-                  Weight (kg) <Required />
-                </FieldLabel>
-                <Input id="weightKg" name="weightKg" type="number" step="0.1" defaultValue={defaultValues?.weightKg ?? ""} className={FILLED_INPUT} required />
+                <FieldLabel htmlFor="weightKg">Weight (kg)</FieldLabel>
+                <Input id="weightKg" name="weightKg" type="number" step="0.1" defaultValue={defaultValues?.weightKg ?? ""} className={FILLED_INPUT} />
               </Field>
               <Field>
                 <FieldLabel htmlFor="birthMark">Birth Mark</FieldLabel>

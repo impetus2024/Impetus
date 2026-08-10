@@ -269,6 +269,14 @@ async function main() {
   const eliteBatchPlayers = players!.filter((p) => p.batch_id === eliteBatch.id);
   const devBatchPlayers = players!.filter((p) => p.batch_id === devBatch.id);
 
+  // ---- player_batches: mirrors each player's primary batch_id above.
+  // Coach-facing rosters (attendance, 5S, injuries) read from this table,
+  // not players.batch_id directly — see the player_batches migration.
+  const { error: playerBatchError } = await supabase.from("player_batches").insert(
+    players!.map((p) => ({ player_id: p.id, batch_id: p.batch_id!, centre_id: centre.id }))
+  );
+  if (playerBatchError) throw playerBatchError;
+
   // ---- parent <-> player links (Test Parent has two children) ----
   const { error: linkError } = await supabase.from("parent_player_links").insert([
     { parent_id: parent.id, player_id: arjun.id, centre_id: centre.id },

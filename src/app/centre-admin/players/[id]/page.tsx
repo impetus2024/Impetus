@@ -65,7 +65,7 @@ export default async function PlayerDetailPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("*, batches(name), player_types(name)")
+    .select("*, batches!players_batch_id_fkey(name), player_types(name)")
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();
