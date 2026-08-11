@@ -11,6 +11,7 @@ import { ProfileCard } from "@/components/profile/profile-card";
 import { AttendanceCalendar } from "@/components/profile/attendance-calendar";
 import { FiveSResultsView } from "@/components/profile/five-s-results-view";
 import { PackageDetailsSection } from "@/components/profile/package-details-section";
+import { PackageChangeLogsSection } from "@/components/profile/package-change-logs-section";
 import { DocumentsSection } from "@/components/profile/documents-section";
 import { updatePlayerProfile, updateParentProfile, setPlayerActive } from "../actions";
 import { DeactivatePlayerButton } from "./deactivate-button";
@@ -266,6 +267,7 @@ export default async function PlayerDetailPage({
                   discount={currentPackage?.is_custom ? currentPackage.discount : null}
                   assignedAt={player.created_at}
                 />
+                <PackageChangeLogsSection playerId={id} />
               </div>
             )}
 

@@ -1176,6 +1176,64 @@ export type Database = {
           },
         ]
       }
+      package_change_logs: {
+        Row: {
+          centre_id: string
+          changed_by: string
+          created_at: string
+          id: string
+          new_amount: number | null
+          new_package_name: string | null
+          old_amount: number | null
+          old_package_name: string | null
+          player_id: string
+        }
+        Insert: {
+          centre_id: string
+          changed_by: string
+          created_at?: string
+          id?: string
+          new_amount?: number | null
+          new_package_name?: string | null
+          old_amount?: number | null
+          old_package_name?: string | null
+          player_id: string
+        }
+        Update: {
+          centre_id?: string
+          changed_by?: string
+          created_at?: string
+          id?: string
+          new_amount?: number | null
+          new_package_name?: string | null
+          old_amount?: number | null
+          old_package_name?: string | null
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_change_logs_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_change_logs_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_change_logs_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       packages: {
         Row: {
           centre_id: string
@@ -1285,6 +1343,7 @@ export type Database = {
           centre_id: string
           created_at: string
           id: string
+          is_registration_payment: boolean
           notes: string | null
           package_id: string | null
           payment_date: string
@@ -1296,6 +1355,7 @@ export type Database = {
           centre_id: string
           created_at?: string
           id?: string
+          is_registration_payment?: boolean
           notes?: string | null
           package_id?: string | null
           payment_date: string
@@ -1307,6 +1367,7 @@ export type Database = {
           centre_id?: string
           created_at?: string
           id?: string
+          is_registration_payment?: boolean
           notes?: string | null
           package_id?: string | null
           payment_date?: string

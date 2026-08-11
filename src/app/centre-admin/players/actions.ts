@@ -243,6 +243,97 @@ async function resolvePackageId(
   return { packageId: data.id };
 }
 
+type PackageSnapshot = { name: string; price: number };
+
+async function fetchPackageSnapshot(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  packageId: string | null | undefined
+): Promise<PackageSnapshot | null> {
+  if (!packageId) return null;
+  const { data } = await supabase
+    .from("packages")
+    .select("name, price")
+    .eq("id", packageId)
+    .maybeSingle();
+  return data ? { name: data.name, price: data.price } : null;
+}
+
+// Keeps a player's package assignment reflected in `payments` without ever
+// duplicating it: the first assignment (at player creation) inserts the one
+// payment row flagged is_registration_payment; every later package change
+// updates that same row's package_id/amount in place instead of adding a
+// new one, so a plan change doesn't move money into a different month on
+// the dashboard/Payment History. Also writes a package_change_logs row so
+// the Package Details section can show what changed and when.
+// oldSnapshot must be captured by the caller *before* resolvePackageId
+// runs -- a custom package is updated in place (see resolvePackageId
+// above), so fetching "old" afterward would just read the new values.
+async function syncPackageAssignment(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  params: {
+    centreId: string;
+    playerId: string;
+    changedBy: string;
+    oldSnapshot: PackageSnapshot | null;
+    newPackageId: string | null;
+  }
+) {
+  const newSnapshot = await fetchPackageSnapshot(supabase, params.newPackageId);
+
+  const unchanged =
+    params.oldSnapshot === null
+      ? newSnapshot === null
+      : newSnapshot !== null &&
+        params.oldSnapshot.name === newSnapshot.name &&
+        params.oldSnapshot.price === newSnapshot.price;
+  if (unchanged) return;
+
+  const { error: logInsertError } = await supabase.from("package_change_logs").insert({
+    centre_id: params.centreId,
+    player_id: params.playerId,
+    old_package_name: params.oldSnapshot?.name ?? null,
+    old_amount: params.oldSnapshot?.price ?? null,
+    new_package_name: newSnapshot?.name ?? null,
+    new_amount: newSnapshot?.price ?? null,
+    changed_by: params.changedBy,
+  });
+  if (logInsertError) {
+    logError(`Failed to log package change for player ${params.playerId}:`, logInsertError);
+  }
+
+  if (!newSnapshot || !params.newPackageId) return;
+
+  const { data: existingPayment } = await supabase
+    .from("payments")
+    .select("id")
+    .eq("player_id", params.playerId)
+    .eq("is_registration_payment", true)
+    .maybeSingle();
+
+  if (existingPayment) {
+    const { error } = await supabase
+      .from("payments")
+      .update({ package_id: params.newPackageId, amount: newSnapshot.price })
+      .eq("id", existingPayment.id);
+    if (error) {
+      logError(`Failed to update registration payment for player ${params.playerId}:`, error);
+    }
+  } else {
+    const { error } = await supabase.from("payments").insert({
+      centre_id: params.centreId,
+      player_id: params.playerId,
+      package_id: params.newPackageId,
+      amount: newSnapshot.price,
+      payment_date: new Date().toISOString().slice(0, 10),
+      recorded_by: params.changedBy,
+      is_registration_payment: true,
+    });
+    if (error) {
+      logError(`Failed to record registration payment for player ${params.playerId}:`, error);
+    }
+  }
+}
+
 export async function createPlayer(
   _prev: PlayerFormState,
   formData: FormData
@@ -333,6 +424,14 @@ export async function createPlayer(
     ...d.additionalBatchIds,
   ]);
 
+  await syncPackageAssignment(supabase, {
+    centreId: centreAdmin.centre_id!,
+    playerId: player.id,
+    changedBy: centreAdmin.id,
+    oldSnapshot: null,
+    newPackageId: packageId,
+  });
+
   try {
     const parentProfileId = await resolveParentProfileId(
       d.parentEmail,
@@ -380,6 +479,8 @@ export async function updatePlayer(
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();
+
+  const oldPackageSnapshot = await fetchPackageSnapshot(supabase, existing?.package_id);
 
   const { packageId, error: packageError } = await resolvePackageId(
     supabase,
@@ -452,6 +553,14 @@ export async function updatePlayer(
   }
 
   await syncPlayerBatches(supabase, id, centreAdmin.centre_id!, [d.batchId, ...d.additionalBatchIds]);
+
+  await syncPackageAssignment(supabase, {
+    centreId: centreAdmin.centre_id!,
+    playerId: id,
+    changedBy: centreAdmin.id,
+    oldSnapshot: oldPackageSnapshot,
+    newPackageId: packageId,
+  });
 
   if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 
@@ -531,6 +640,8 @@ export async function updatePlayerProfile(
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();
 
+  const oldPackageSnapshot = await fetchPackageSnapshot(supabase, existing?.package_id);
+
   const { packageId, error: packageError } = await resolvePackageId(
     supabase,
     centreAdmin.centre_id!,
@@ -593,6 +704,14 @@ export async function updatePlayerProfile(
   }
 
   await syncPlayerBatches(supabase, id, centreAdmin.centre_id!, [d.batchId, ...d.additionalBatchIds]);
+
+  await syncPackageAssignment(supabase, {
+    centreId: centreAdmin.centre_id!,
+    playerId: id,
+    changedBy: centreAdmin.id,
+    oldSnapshot: oldPackageSnapshot,
+    newPackageId: packageId,
+  });
 
   if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
 
