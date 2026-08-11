@@ -10,6 +10,7 @@
     "seed:super-admin": "node --env-file=.env.local -r tsx/cjs scripts/seed-super-admin.ts",
     "seed:test-accounts": "node --env-file=.env.local -r tsx/cjs scripts/seed-test-accounts.ts",
     "seed:mock-data": "node --env-file=.env.local -r tsx/cjs scripts/seed-mock-data.ts",
+    "backfill:registration-payments": "node --env-file=.env.local -r tsx/cjs scripts/backfill-registration-payments.ts",
     "test:e2e": "playwright test",
     "db:dump-schema": "supabase db dump --local --schema public -f schema.sql",
     "db:push": "node -r tsx/cjs scripts/lib/supabase-guard.ts db push",
