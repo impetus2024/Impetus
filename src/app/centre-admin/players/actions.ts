@@ -268,6 +268,15 @@ async function fetchPackageSnapshot(
 // oldSnapshot must be captured by the caller *before* resolvePackageId
 // runs -- a custom package is updated in place (see resolvePackageId
 // above), so fetching "old" afterward would just read the new values.
+//
+// Separately: players created before this sync existed (or before its
+// migration was applied) have a package but no registration payment at
+// all. Re-saving their profile with nothing actually changed used to be a
+// pure no-op here, which meant a centre_admin had no self-service way to
+// fill that gap short of a manual DB backfill. So a missing payment is
+// always backfilled, even when old/new package data is identical -- just
+// without a package_change_logs entry in that case, since nothing about
+// the assignment actually changed.
 async function syncPackageAssignment(
   supabase: Awaited<ReturnType<typeof createClient>>,
   params: {
@@ -286,22 +295,6 @@ async function syncPackageAssignment(
       : newSnapshot !== null &&
         params.oldSnapshot.name === newSnapshot.name &&
         params.oldSnapshot.price === newSnapshot.price;
-  if (unchanged) return;
-
-  const { error: logInsertError } = await supabase.from("package_change_logs").insert({
-    centre_id: params.centreId,
-    player_id: params.playerId,
-    old_package_name: params.oldSnapshot?.name ?? null,
-    old_amount: params.oldSnapshot?.price ?? null,
-    new_package_name: newSnapshot?.name ?? null,
-    new_amount: newSnapshot?.price ?? null,
-    changed_by: params.changedBy,
-  });
-  if (logInsertError) {
-    logError(`Failed to log package change for player ${params.playerId}:`, logInsertError);
-  }
-
-  if (!newSnapshot || !params.newPackageId) return;
 
   const { data: existingPayment } = await supabase
     .from("payments")
@@ -309,6 +302,25 @@ async function syncPackageAssignment(
     .eq("player_id", params.playerId)
     .eq("is_registration_payment", true)
     .maybeSingle();
+
+  if (unchanged && existingPayment) return;
+
+  if (!unchanged) {
+    const { error: logInsertError } = await supabase.from("package_change_logs").insert({
+      centre_id: params.centreId,
+      player_id: params.playerId,
+      old_package_name: params.oldSnapshot?.name ?? null,
+      old_amount: params.oldSnapshot?.price ?? null,
+      new_package_name: newSnapshot?.name ?? null,
+      new_amount: newSnapshot?.price ?? null,
+      changed_by: params.changedBy,
+    });
+    if (logInsertError) {
+      logError(`Failed to log package change for player ${params.playerId}:`, logInsertError);
+    }
+  }
+
+  if (!newSnapshot || !params.newPackageId) return;
 
   if (existingPayment) {
     const { error } = await supabase
