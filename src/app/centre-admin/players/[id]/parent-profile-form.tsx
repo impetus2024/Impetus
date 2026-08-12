@@ -4,8 +4,17 @@ import { useActionState, useState } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Field, FieldLabel, FieldGroup, FieldDescription, FILLED_INPUT } from "@/components/ui/field";
 import { ParentProfileView, type ParentProfileViewValues } from "@/components/profile/parent-profile-view";
+import { SUPPORTED_COUNTRIES } from "@/lib/phone";
+import { cn } from "@/lib/utils";
 import type { PlayerFormState } from "../actions";
 
 export type ParentProfileDefaultValues = ParentProfileViewValues;
@@ -77,6 +86,10 @@ export function ParentProfileForm({
         <Field>
           <FieldLabel htmlFor="parentContactNumber">Parent / Guardian Contact Number</FieldLabel>
           <Input id="parentContactNumber" name="parentContactNumber" defaultValue={defaultValues.parentContactNumber ?? ""} className={FILLED_INPUT} />
+          <FieldDescription>
+            Local number only (e.g. 9900123417) unless already saved in international format — the
+            country selected below determines its code.
+          </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="addressLine1">Address Line 1</FieldLabel>
@@ -88,7 +101,18 @@ export function ParentProfileForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="country">Country</FieldLabel>
-          <Input id="country" name="country" defaultValue={defaultValues.country ?? ""} className={FILLED_INPUT} />
+          <Select name="country" defaultValue={defaultValues.country ?? undefined}>
+            <SelectTrigger id="country" className={cn("w-full", FILLED_INPUT)}>
+              <SelectValue placeholder="Select country" />
+            </SelectTrigger>
+            <SelectContent>
+              {SUPPORTED_COUNTRIES.map((c) => (
+                <SelectItem key={c.name} value={c.name}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="state">State</FieldLabel>

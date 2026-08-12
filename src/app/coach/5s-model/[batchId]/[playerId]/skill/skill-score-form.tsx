@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
+import { StarRatingInput } from "@/components/ui/star-rating";
 import { submitSkillScores, type SkillGroup, type SkillScoresFormState } from "../../../actions";
 
 type Test = { id: string; name: string; group_name: string | null; is_required: boolean };
@@ -17,6 +18,7 @@ export function SkillScoreForm({
   existingScores,
   existingGroupRemarks,
   overallRemarks,
+  overallRating,
   lockedTestIds,
 }: {
   batchId: string;
@@ -25,6 +27,7 @@ export function SkillScoreForm({
   existingScores: Map<string, number>;
   existingGroupRemarks: Map<string, string>;
   overallRemarks: string;
+  overallRating: number | null;
   lockedTestIds: Set<string>;
 }) {
   const groups: { label: string; tests: Test[] }[] = [];
@@ -103,6 +106,13 @@ export function SkillScoreForm({
 
       <div className="space-y-4 border-t border-border/50 pt-6">
         <h2 className="text-lg font-semibold">Over All Remarks</h2>
+        <Field>
+          <FieldLabel>
+            <span className="text-destructive">*</span> Overall Skill Rating
+          </FieldLabel>
+          <FieldDescription>This rating is what drives Skill&apos;s score on the results graph.</FieldDescription>
+          <StarRatingInput name="overall_rating" defaultValue={overallRating} />
+        </Field>
         <Field>
           <FieldLabel htmlFor="overall_remarks">
             <span className="text-destructive">*</span> Remarks

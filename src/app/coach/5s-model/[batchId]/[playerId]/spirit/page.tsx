@@ -44,12 +44,18 @@ export default async function Coach5sModelSpiritPage({
     .single();
   const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
 
-  const [allQuestions, { data: responses }] = await Promise.all([
+  const [allQuestions, { data: responses }, { data: categoryNote }] = await Promise.all([
     getFiveSQuestions(),
     supabase
       .from("five_s_question_responses")
       .select("question_id, answer")
       .eq("player_id", playerId),
+    supabase
+      .from("five_s_category_notes")
+      .select("rating")
+      .eq("player_id", playerId)
+      .eq("category", "spirit")
+      .maybeSingle(),
   ]);
   const questions = allQuestions.filter((q) => q.category === "spirit");
 
@@ -81,6 +87,7 @@ export default async function Coach5sModelSpiritPage({
               playerId={playerId}
               questions={questions}
               existingByQuestion={existingByQuestion}
+              overallRating={categoryNote?.rating ?? null}
             />
           </CardContent>
         </Card>

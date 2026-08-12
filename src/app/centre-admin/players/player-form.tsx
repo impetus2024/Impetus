@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/field";
 import { Stepper } from "@/components/ui/stepper";
 import { selectLabel, cn } from "@/lib/utils";
+import { SUPPORTED_COUNTRIES } from "@/lib/phone";
 import type { PlayerFormState } from "./actions";
 
 type Option = { id: string; name: string };
@@ -381,6 +382,7 @@ export function PlayerForm({
                   Parent / Guardian Contact Number <Required />
                 </FieldLabel>
                 <Input id="parentContactNumber" name="parentContactNumber" defaultValue={defaultValues?.parentContactNumber ?? ""} className={FILLED_INPUT} required />
+                <FieldDescription>Local number only, e.g. 9900123417 — the country selected below determines its code.</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="addressLine1">
@@ -396,7 +398,18 @@ export function PlayerForm({
                 <FieldLabel htmlFor="country">
                   Country <Required />
                 </FieldLabel>
-                <Input id="country" name="country" defaultValue={defaultValues?.country ?? ""} className={FILLED_INPUT} required />
+                <Select name="country" defaultValue={defaultValues?.country ?? undefined} required>
+                  <SelectTrigger id="country" className={cn("w-full", FILLED_INPUT)}>
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_COUNTRIES.map((c) => (
+                      <SelectItem key={c.name} value={c.name}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor="state">

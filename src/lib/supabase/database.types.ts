@@ -369,6 +369,7 @@ export type Database = {
           centre_id: string
           id: string
           player_id: string
+          rating: number | null
           recorded_at: string
           recorded_by: string
           remarks: string
@@ -379,6 +380,7 @@ export type Database = {
           centre_id: string
           id?: string
           player_id: string
+          rating?: number | null
           recorded_at?: string
           recorded_by: string
           remarks: string
@@ -389,6 +391,7 @@ export type Database = {
           centre_id?: string
           id?: string
           player_id?: string
+          rating?: number | null
           recorded_at?: string
           recorded_by?: string
           remarks?: string
@@ -1746,6 +1749,67 @@ export type Database = {
           },
         ]
       }
+      whatsapp_logs: {
+        Row: {
+          centre_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          parent_profile_id: string | null
+          player_id: string
+          recipient_phone: string
+          route_mobile_request_id: string | null
+          status: Database["public"]["Enums"]["whatsapp_status"]
+          template_name: string
+        }
+        Insert: {
+          centre_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          parent_profile_id?: string | null
+          player_id: string
+          recipient_phone: string
+          route_mobile_request_id?: string | null
+          status: Database["public"]["Enums"]["whatsapp_status"]
+          template_name: string
+        }
+        Update: {
+          centre_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          parent_profile_id?: string | null
+          player_id?: string
+          recipient_phone?: string
+          route_mobile_request_id?: string | null
+          status?: Database["public"]["Enums"]["whatsapp_status"]
+          template_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_logs_centre_id_fkey"
+            columns: ["centre_id"]
+            isOneToOne: false
+            referencedRelation: "centres"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_logs_parent_profile_id_fkey"
+            columns: ["parent_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_logs_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1838,6 +1902,7 @@ export type Database = {
         | "parent"
         | "staff"
         | "finance"
+      whatsapp_status: "sent" | "failed" | "skipped"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1997,6 +2062,7 @@ export const Constants = {
         "staff",
         "finance",
       ],
+      whatsapp_status: ["sent", "failed", "skipped"],
     },
   },
 } as const

@@ -13,6 +13,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PlayerRatingBadge } from "@/components/five-s/player-rating-badge";
+import { getOverallPlayerRatings } from "@/lib/five-s/scores";
+import { FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 
 export default async function Coach5sModelBatchPage({
   params,
@@ -56,6 +59,13 @@ export default async function Coach5sModelBatchPage({
     ...(responseRows ?? []).map((r) => r.player_id),
   ]);
 
+  // No publish gate here (unlike centre-admin/parent-facing pages) — a
+  // coach always sees their own in-progress 5S data for their own players.
+  const ratingByPlayer = await getOverallPlayerRatings(
+    playerIds,
+    FIVE_S_RADAR_AXES.map((a) => a.key)
+  );
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{batch.name} — 5S Model</h1>
@@ -70,7 +80,12 @@ export default async function Coach5sModelBatchPage({
         <TableBody>
           {players?.map((p) => (
             <TableRow key={p.id}>
-              <TableCell>{p.name}</TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  {p.name}
+                  <PlayerRatingBadge rating={ratingByPlayer.get(p.id) ?? null} />
+                </div>
+              </TableCell>
               <TableCell className="text-right space-x-2">
                 {playersWithScores.has(p.id) && (
                   <Button

@@ -8,9 +8,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
 import { provisionUser } from "@/lib/auth/provision-user";
+import { sendWhatsAppWelcomeTemplate } from "@/lib/whatsapp/send";
+import { normalizeContactNumber } from "@/lib/phone";
 import { encryptField } from "@/lib/crypto/field-encryption";
 import { absoluteUrl } from "@/lib/url";
-import { logError } from "@/lib/logger";
+import { logError, logWarning } from "@/lib/logger";
 import type { Database } from "@/lib/supabase/database.types";
 
 type PlayerInsert = Database["public"]["Tables"]["players"]["Insert"];
@@ -358,6 +360,15 @@ export async function createPlayer(
   }
   const d = parsed.data;
 
+  // Stores the parent's contact number in full international format (see
+  // src/lib/phone.ts) so it's usable directly by WhatsApp without guessing
+  // a country later — validated against the selected country's mobile
+  // pattern here rather than trusted as-is.
+  const phoneResult = normalizeContactNumber(d.country, d.parentContactNumber);
+  if (!phoneResult.ok) {
+    return { error: phoneResult.error };
+  }
+
   const supabase = await createClient();
   const { packageId, error: packageError } = await resolvePackageId(
     supabase,
@@ -397,7 +408,7 @@ export async function createPlayer(
     father_name: d.fatherName ?? null,
     mother_name: d.motherName ?? null,
     parent_email: d.parentEmail,
-    parent_contact_number: d.parentContactNumber ?? null,
+    parent_contact_number: phoneResult.value,
     address_line1: d.addressLine1 ?? null,
     address_line2: d.addressLine2 ?? null,
     country: d.country ?? null,
@@ -444,8 +455,9 @@ export async function createPlayer(
     newPackageId: packageId,
   });
 
+  let parentProfileId: string | null = null;
   try {
-    const parentProfileId = await resolveParentProfileId(
+    parentProfileId = await resolveParentProfileId(
       d.parentEmail,
       d.fatherName || d.motherName || "Parent"
     );
@@ -463,6 +475,22 @@ export async function createPlayer(
     // save of the Parent Profile tab, so saving that tab once is the actual
     // recovery path — not just editing player fields in general.
     logError(`Failed to link parent for player ${player.id} (${d.parentEmail}):`, err);
+  }
+
+  // WhatsApp onboarding message is a notification, not a precondition —
+  // same reasoning as the parent-link step above and sendAccountInviteEmail's
+  // own doc comment. sendWhatsAppWelcomeTemplate never throws on its own
+  // (every failure is caught/logged inside it); this try/catch is only a
+  // defensive backstop so player creation truly cannot fail here.
+  try {
+    await sendWhatsAppWelcomeTemplate({
+      centreId: centreAdmin.centre_id!,
+      playerId: player.id,
+      parentProfileId,
+      rawPhoneNumber: phoneResult.value,
+    });
+  } catch (err) {
+    logWarning(`Unexpected error sending WhatsApp welcome for player ${player.id}:`, err);
   }
 
   revalidatePath(PATH);
@@ -767,10 +795,23 @@ export async function updateParentProfile(
   }
   const d = parsed.data;
 
+  // Only normalize when a contact number is actually being set — this form
+  // allows clearing the field (both are optional here), and an already-
+  // international or pre-existing number must round-trip unchanged (see
+  // src/lib/phone.ts's doc comment).
+  let parentContactNumber: string | null = d.parentContactNumber ?? null;
+  if (d.parentContactNumber) {
+    const phoneResult = normalizeContactNumber(d.country ?? "", d.parentContactNumber);
+    if (!phoneResult.ok) {
+      return { error: phoneResult.error };
+    }
+    parentContactNumber = phoneResult.value;
+  }
+
   const update: PlayerUpdate = {
     father_name: d.fatherName ?? null,
     mother_name: d.motherName ?? null,
-    parent_contact_number: d.parentContactNumber ?? null,
+    parent_contact_number: parentContactNumber,
     address_line1: d.addressLine1 ?? null,
     address_line2: d.addressLine2 ?? null,
     country: d.country ?? null,

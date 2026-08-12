@@ -1,13 +1,9 @@
+import { Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
-import { computeFiveSScores, getStaminaBenchmarkContext } from "@/lib/five-s/scores";
+import { getFiveSReportData } from "@/lib/five-s/report-data";
 import { FiveSPlaceholder } from "@/components/profile/five-s-placeholder";
-import { FiveSRadarSection, FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
-import { FIVE_S_CATEGORY_META } from "@/lib/five-s/categories";
-
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
-  Object.entries(FIVE_S_CATEGORY_META).map(([key, meta]) => [key, meta.label])
-);
+import { FiveSRadarSection } from "@/components/profile/five-s-radar-section";
+import { FiveSPdfExportButton } from "@/components/profile/five-s-pdf-export-button";
 
 const ANSWER_LABEL: Record<string, string> = {
   rarely: "Rarely",
@@ -49,194 +45,123 @@ export async function FiveSResultsView({
     }
   }
 
-  const [
-    tests,
-    { data: results },
-    { data: notes },
-    { data: groupNotes },
-    questions,
-    { data: responses },
-  ] = await Promise.all([
-    getFiveSTests(),
-    supabase
-      .from("five_s_results")
-      .select("test_id, score, level, shuttle, vo2_max, remarks, recorded_at, previous_score")
-      .eq("player_id", playerId),
-    supabase.from("five_s_category_notes").select("category, remarks").eq("player_id", playerId),
-    supabase.from("five_s_group_notes").select("category, group_name, remarks").eq("player_id", playerId),
-    getFiveSQuestions(),
-    supabase
-      .from("five_s_question_responses")
-      .select("question_id, answer")
-      .eq("player_id", playerId),
-  ]);
+  const report = await getFiveSReportData(playerId);
 
-  const hasTests = tests.length > 0;
-  const hasQuestions = questions.length > 0;
-
-  if (!hasTests && !hasQuestions) {
+  if (!report.hasData) {
     return <FiveSPlaceholder />;
   }
 
-  const resultByTest = new Map(
-    (results ?? []).map((r) => [r.test_id, r])
-  );
-  const noteByCategory = new Map((notes ?? []).map((n) => [n.category, n.remarks]));
-  const groupNoteByKey = new Map((groupNotes ?? []).map((n) => [`${n.category}::${n.group_name}`, n.remarks]));
-  const responseByQuestion = new Map((responses ?? []).map((r) => [r.question_id, r.answer]));
-
-  const categories = [...new Set(tests.map((t) => t.category))];
-  const questionCategories = [...new Set(questions.map((q) => q.category))];
-
-  const staminaTestIds = tests.filter((t) => t.category === "stamina").map((t) => t.id);
-  const staminaContext = await getStaminaBenchmarkContext(supabase, playerId, staminaTestIds);
-
-  const {
-    current: currentScores,
-    previous: previousScores,
-    hasPrevious,
-  } = computeFiveSScores(
-    FIVE_S_RADAR_AXES.map((a) => a.key),
-    tests,
-    questions,
-    resultByTest,
-    responseByQuestion,
-    staminaContext
-  );
+  const { current: currentScores, previous: previousScores, hasPrevious } = report.radar;
 
   return (
     <div className="space-y-8">
+      <div className="flex items-center justify-end">
+        <FiveSPdfExportButton playerId={playerId} />
+      </div>
+
       <FiveSRadarSection current={currentScores} previous={previousScores} showPrevious={hasPrevious} />
 
-      {categories.map((category) => {
-        const categoryTests = tests.filter((t) => t.category === category);
-        const overallRemarks = noteByCategory.get(category);
-
-        // Subsection groups within a category (e.g. Strength's Flexibility
-        // Test / Strength Test / Power Test). Falls back to a single
-        // unlabeled group when tests have no group_name.
-        const subgroups: { label: string; tests: typeof categoryTests }[] = [];
-        for (const test of categoryTests) {
-          const label = test.group_name ?? "";
-          const current = subgroups[subgroups.length - 1];
-          if (current && current.label === label) {
-            current.tests.push(test);
-          } else {
-            subgroups.push({ label, tests: [test] });
-          }
-        }
-
-        return (
-          <div key={category}>
-            <h3 className="text-lg font-semibold">{CATEGORY_LABEL[category] ?? category}</h3>
-            <div className="mt-3 space-y-5">
-              {subgroups.map((group) => {
-                const groupRemarks = group.label
-                  ? groupNoteByKey.get(`${category}::${group.label}`)
-                  : undefined;
-                return (
-                  <div key={group.label}>
-                    {group.label && (
-                      <h4 className="mb-2 text-sm font-semibold text-muted-foreground">{group.label}</h4>
-                    )}
-                    <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
-                      {group.tests.map((test) => {
-                        const result = resultByTest.get(test.id);
-                        return (
-                          <div key={test.id}>
-                            <p className="mb-1.5 text-sm font-medium text-foreground">{test.name}</p>
-                            <div className="flex min-h-9 items-center justify-between rounded-lg bg-muted/60 px-3 py-1.5 text-sm">
-                              <span className={result ? "text-foreground" : "text-muted-foreground"}>
-                                {result
-                                  ? test.unit === "level"
-                                    ? `Level ${result.level} / Shuttle ${result.shuttle}`
-                                    : `${result.score} ${test.unit}`.trim()
-                                  : "Not recorded yet"}
-                              </span>
-                              {result && (
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(result.recorded_at).toLocaleDateString()}
-                                </span>
-                              )}
-                            </div>
-                            {result?.vo2_max != null && (
-                              <p className="mt-1 text-xs text-muted-foreground">VO2 Max: {result.vo2_max}</p>
-                            )}
-                            {result?.remarks && (
-                              <p className="mt-1 text-xs text-muted-foreground">Remarks: {result.remarks}</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {groupRemarks && (
-                      <div className="mt-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
-                        <p className="text-xs font-medium text-muted-foreground">Remarks</p>
-                        <p className="mt-0.5 text-foreground">{groupRemarks}</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {overallRemarks && (
-              <div className="mt-4 rounded-lg bg-muted/60 px-3 py-2 text-sm">
-                <p className="text-xs font-medium text-muted-foreground">Overall Remarks</p>
-                <p className="mt-0.5 text-foreground">{overallRemarks}</p>
-              </div>
+      {report.testSections.map((section) => (
+        <div key={section.category}>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold">{section.categoryLabel}</h3>
+            {section.rating != null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <Star className="size-3 fill-current" />
+                {section.rating} / 5
+              </span>
             )}
           </div>
-        );
-      })}
-
-      {questionCategories.map((category) => {
-        const categoryQuestions = questions.filter((q) => q.category === category);
-
-        const sections: { label: string; questions: typeof categoryQuestions }[] = [];
-        for (const question of categoryQuestions) {
-          const current = sections[sections.length - 1];
-          if (current && current.label === question.section) {
-            current.questions.push(question);
-          } else {
-            sections.push({ label: question.section, questions: [question] });
-          }
-        }
-
-        return (
-          <div key={category}>
-            <h3 className="text-lg font-semibold">{CATEGORY_LABEL[category] ?? category}</h3>
-            <div className="mt-3 space-y-5">
-              {sections.map((section) => (
-                <div key={section.label}>
-                  <h4 className="mb-2 text-sm font-semibold text-muted-foreground">{section.label}</h4>
-                  <div className="space-y-2">
-                    {section.questions.map((question) => {
-                      const answer = responseByQuestion.get(question.id);
-                      return (
-                        <div
-                          key={question.id}
-                          className="flex items-center justify-between gap-4 rounded-lg bg-muted/60 px-3 py-2 text-sm"
-                        >
-                          <span className="text-foreground">{question.question}</span>
-                          <span
-                            className={
-                              answer
-                                ? "shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
-                                : "shrink-0 text-xs text-muted-foreground"
-                            }
-                          >
-                            {answer ? ANSWER_LABEL[answer] : "Not recorded"}
+          <div className="mt-3 space-y-5">
+            {section.groups.map((group) => (
+              <div key={group.label}>
+                {group.label && (
+                  <h4 className="mb-2 text-sm font-semibold text-muted-foreground">{group.label}</h4>
+                )}
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+                  {group.tests.map((test) => (
+                    <div key={test.id}>
+                      <p className="mb-1.5 text-sm font-medium text-foreground">{test.name}</p>
+                      <div className="flex min-h-9 items-center justify-between rounded-lg bg-muted/60 px-3 py-1.5 text-sm">
+                        <span className={test.result ? "text-foreground" : "text-muted-foreground"}>
+                          {test.result
+                            ? test.unit === "level"
+                              ? `Level ${test.result.level} / Shuttle ${test.result.shuttle}`
+                              : `${test.result.score} ${test.unit}`.trim()
+                            : "Not recorded yet"}
+                        </span>
+                        {test.result && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(test.result.recorded_at).toLocaleDateString()}
                           </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        )}
+                      </div>
+                      {test.result?.vo2_max != null && (
+                        <p className="mt-1 text-xs text-muted-foreground">VO2 Max: {test.result.vo2_max}</p>
+                      )}
+                      {test.result?.remarks && (
+                        <p className="mt-1 text-xs text-muted-foreground">Remarks: {test.result.remarks}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+                {group.remarks && (
+                  <div className="mt-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                    <p className="text-xs font-medium text-muted-foreground">Remarks</p>
+                    <p className="mt-0.5 text-foreground">{group.remarks}</p>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        );
-      })}
+          {section.overallRemarks && (
+            <div className="mt-4 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+              <p className="text-xs font-medium text-muted-foreground">Overall Remarks</p>
+              <p className="mt-0.5 text-foreground">{section.overallRemarks}</p>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {report.questionSections.map((section) => (
+        <div key={section.category}>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold">{section.categoryLabel}</h3>
+            {section.rating != null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <Star className="size-3 fill-current" />
+                {section.rating} / 5
+              </span>
+            )}
+          </div>
+          <div className="mt-3 space-y-5">
+            {section.groups.map((group) => (
+              <div key={group.label}>
+                <h4 className="mb-2 text-sm font-semibold text-muted-foreground">{group.label}</h4>
+                <div className="space-y-2">
+                  {group.questions.map((question) => (
+                    <div
+                      key={question.id}
+                      className="flex items-center justify-between gap-4 rounded-lg bg-muted/60 px-3 py-2 text-sm"
+                    >
+                      <span className="text-foreground">{question.question}</span>
+                      <span
+                        className={
+                          question.answer
+                            ? "shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                            : "shrink-0 text-xs text-muted-foreground"
+                        }
+                      >
+                        {question.answer ? ANSWER_LABEL[question.answer] : "Not recorded"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
