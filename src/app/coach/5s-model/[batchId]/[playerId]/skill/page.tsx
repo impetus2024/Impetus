@@ -57,7 +57,7 @@ export default async function Coach5sModelSkillPage({
       .eq("category", "skill"),
     supabase
       .from("five_s_category_notes")
-      .select("remarks")
+      .select("remarks, rating")
       .eq("player_id", playerId)
       .eq("category", "skill")
       .maybeSingle(),
@@ -100,6 +100,7 @@ export default async function Coach5sModelSkillPage({
               existingScores={existingScores}
               existingGroupRemarks={existingGroupRemarks}
               overallRemarks={overallNote?.remarks ?? ""}
+              overallRating={overallNote?.rating ?? null}
               lockedTestIds={lockedTestIds}
             />
           </CardContent>

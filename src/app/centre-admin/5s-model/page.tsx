@@ -10,6 +10,9 @@ import { ListPagination } from "@/components/list-pagination";
 import { parsePageParam, pageRange, totalPages as computeTotalPages } from "@/lib/pagination";
 import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
 import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
+import { PlayerRatingBadge } from "@/components/five-s/player-rating-badge";
+import { getOverallPlayerRatings } from "@/lib/five-s/scores";
+import { FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 import {
   Table,
   TableBody,
@@ -41,7 +44,7 @@ export default async function CentreAdmin5sModelPage({
   if (q) query = query.ilike("name", `%${q}%`);
   if (batchId) query = query.eq("batch_id", batchId);
 
-  const [{ data: players, count }, { data: batches }, { data: centre }] = await Promise.all([
+  const [{ data: players, count }, { data: batches }, { data: centre }, { data: reports }] = await Promise.all([
     query.order("name").range(from, to),
     supabase
       .from("batches")
@@ -53,10 +56,24 @@ export default async function CentreAdmin5sModelPage({
       .select("five_s_window_start, five_s_window_end")
       .eq("id", centreAdmin.centre_id!)
       .single(),
+    // One row per player (five_s_reports.player_id is unique — publishing
+    // again updates this same row), so published_at is always that
+    // player's most recent publish.
+    supabase.from("five_s_reports").select("player_id, published_at").eq("centre_id", centreAdmin.centre_id!),
   ]);
 
   const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
   const hasFilters = Boolean(q || batchId);
+  const publishedAtByPlayer = new Map((reports ?? []).map((r) => [r.player_id, r.published_at]));
+
+  // Overall 5S rating badge — same publish gate as publishedAt/"View
+  // Results" above (FiveSResultsView's gateUntilPublished rule): never show
+  // a coach's in-progress rating to centre-admin before they publish.
+  const playerIds = (players ?? []).map((p) => p.id);
+  const ratingByPlayer =
+    playerIds.length > 0
+      ? await getOverallPlayerRatings(playerIds, FIVE_S_RADAR_AXES.map((a) => a.key))
+      : new Map();
 
   return (
     <div className="space-y-6">
@@ -90,26 +107,38 @@ export default async function CentreAdmin5sModelPage({
           <TableRow>
             <TableHead>Player</TableHead>
             <TableHead>Batch</TableHead>
+            <TableHead>5S Result Date</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {players?.map((p) => (
-            <TableRow key={p.id}>
-              <TableCell>{p.name}</TableCell>
-              <TableCell>{p.batches?.name ?? "—"}</TableCell>
-              <TableCell className="text-right">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  render={<Link href={`/centre-admin/5s-model/${p.id}`}>View Results</Link>}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
+          {players?.map((p) => {
+            const publishedAt = publishedAtByPlayer.get(p.id);
+            return (
+              <TableRow key={p.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {p.name}
+                    {publishedAt && <PlayerRatingBadge rating={ratingByPlayer.get(p.id) ?? null} />}
+                  </div>
+                </TableCell>
+                <TableCell>{p.batches?.name ?? "—"}</TableCell>
+                <TableCell>{publishedAt ? new Date(publishedAt).toLocaleDateString() : "—"}</TableCell>
+                <TableCell className="text-right">
+                  {publishedAt && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href={`/centre-admin/5s-model/${p.id}`}>View Results</Link>}
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
           {players?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3}>
+              <TableCell colSpan={4}>
                 {hasFilters ? (
                   <EmptyState icon={Sparkles} title="No players match your search" message="Try a different name or clear the filters." />
                 ) : (

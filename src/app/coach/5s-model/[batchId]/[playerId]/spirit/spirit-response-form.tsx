@@ -4,7 +4,8 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { FieldDescription } from "@/components/ui/field";
+import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
+import { StarRatingInput } from "@/components/ui/star-rating";
 import { submitSpiritResponses, type SpiritResponsesFormState } from "../../../actions";
 
 type Question = { id: string; section: string; question: string };
@@ -23,11 +24,13 @@ export function SpiritResponseForm({
   playerId,
   questions,
   existingByQuestion,
+  overallRating,
 }: {
   batchId: string;
   playerId: string;
   questions: Question[];
   existingByQuestion: Map<string, string>;
+  overallRating: number | null;
 }) {
   const action = submitSpiritResponses.bind(
     null,
@@ -89,6 +92,17 @@ export function SpiritResponseForm({
           </div>
         </div>
       ))}
+
+      <div className="space-y-4 border-t border-border/50 pt-6">
+        <h2 className="text-lg font-semibold">Over All Rating</h2>
+        <Field>
+          <FieldLabel>
+            <span className="text-destructive">*</span> Overall Spirit Rating
+          </FieldLabel>
+          <FieldDescription>This rating is what drives Spirit&apos;s score on the results graph.</FieldDescription>
+          <StarRatingInput name="overall_rating" defaultValue={overallRating} />
+        </Field>
+      </div>
 
       {state?.error && <FieldDescription className="text-destructive">{state.error}</FieldDescription>}
 

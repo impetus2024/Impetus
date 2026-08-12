@@ -13,6 +13,19 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+// Shared by submitSkillScores/submitSpiritResponses — the coach-entered
+// overall category rating (five_s_category_notes.rating) that drives the
+// radar graph for Skill/Spirit (see computeFiveSScores). Returns null for
+// anything not a valid 1-5, half-star-step number, same "reject rather than
+// silently clamp/round" stance as every other score input in this file.
+function validateCategoryRating(raw: FormDataEntryValue | null): number | null {
+  if (raw === null || raw === "") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 1 || value > 5) return null;
+  if (Math.round(value * 2) !== value * 2) return null;
+  return value;
+}
+
 // Shared by every score/response-submitting action below — score entry
 // (not publishing) only happens while the centre admin's 5S testing
 // window is open. Re-checked here server-side since the disabled state of
@@ -386,6 +399,11 @@ export async function submitSpiritResponses(
     });
   }
 
+  const overallRating = validateCategoryRating(formData.get("overall_rating"));
+  if (overallRating == null) {
+    return { error: "Enter an overall spirit rating between 1 and 5 (half-star steps allowed)." };
+  }
+
   const { error } = await supabase
     .from("five_s_question_responses")
     .upsert(rows, { onConflict: "player_id,question_id" });
@@ -393,6 +411,26 @@ export async function submitSpiritResponses(
   if (error) {
     logError(`Failed to save spirit responses for player ${playerId}:`, error);
     return { error: "Failed to save responses." };
+  }
+
+  // Spirit has no "overall remarks" concept in its own UI (unlike Skill/
+  // Stamina) -- remarks stays empty rather than adding an unrequested
+  // textarea just to satisfy this column's NOT NULL constraint.
+  const { error: ratingError } = await supabase.from("five_s_category_notes").upsert(
+    {
+      player_id: playerId,
+      category: "spirit",
+      centre_id: batch.centre_id,
+      remarks: "",
+      rating: overallRating,
+      recorded_by: coach.id,
+    },
+    { onConflict: "player_id,category" }
+  );
+
+  if (ratingError) {
+    logError(`Failed to save spirit rating for player ${playerId}:`, ratingError);
+    return { error: "Failed to save overall rating." };
   }
 
   revalidatePath(`/coach/5s-model/${batchId}/${playerId}`);
@@ -499,6 +537,11 @@ export async function submitSkillScores(
     return { error: "Overall remarks are required." };
   }
 
+  const overallRating = validateCategoryRating(formData.get("overall_rating"));
+  if (overallRating == null) {
+    return { error: "Enter an overall skill rating between 1 and 5 (half-star steps allowed)." };
+  }
+
   // Results, group remarks, and the overall category note used to be three
   // separate .upsert() calls — a failure on the second or third left the
   // first already committed, with nothing to undo it. submit_skill_scores
@@ -512,6 +555,7 @@ export async function submitSkillScores(
       category: "skill",
       centre_id: batch.centre_id,
       remarks: overallRemarks,
+      rating: overallRating,
       recorded_by: coach.id,
     },
   });

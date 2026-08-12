@@ -18,6 +18,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PlayerRatingBadge } from "@/components/five-s/player-rating-badge";
+import { getOverallPlayerRatings } from "@/lib/five-s/scores";
+import { FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 import { PlayerRowActions } from "./row-actions";
 
 export default async function PlayersPage({
@@ -61,6 +64,20 @@ export default async function PlayersPage({
 
   const hasFilters = Boolean(q || batchId || playerTypeId || status);
 
+  // Overall 5S rating badge — same publish gate as everywhere else
+  // centre-admin sees a coach's 5S data (FiveSResultsView's
+  // gateUntilPublished): only shown once the coach has published the
+  // player's report, never their in-progress scores.
+  const playerIds = (players ?? []).map((p) => p.id);
+  const [{ data: publishedReports }, ratingByPlayer] =
+    playerIds.length > 0
+      ? await Promise.all([
+          supabase.from("five_s_reports").select("player_id").in("player_id", playerIds),
+          getOverallPlayerRatings(playerIds, FIVE_S_RADAR_AXES.map((a) => a.key)),
+        ])
+      : [{ data: [] }, new Map()];
+  const publishedPlayerIds = new Set((publishedReports ?? []).map((r) => r.player_id));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -96,7 +113,14 @@ export default async function PlayersPage({
         <TableBody>
           {players?.map((player) => (
             <TableRow key={player.id}>
-              <TableCell>{player.name}</TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  {player.name}
+                  {publishedPlayerIds.has(player.id) && (
+                    <PlayerRatingBadge rating={ratingByPlayer.get(player.id) ?? null} />
+                  )}
+                </div>
+              </TableCell>
               <TableCell>{calculateAge(player.date_of_birth)}</TableCell>
               <TableCell>{player.batches?.name ?? "—"}</TableCell>
               <TableCell>{player.player_types?.name ?? "—"}</TableCell>
