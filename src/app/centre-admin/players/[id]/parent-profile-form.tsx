@@ -78,9 +78,16 @@ export function ParentProfileForm({
         </Field>
         <Field>
           <FieldLabel htmlFor="parentEmail">Parent / Guardian Email ID</FieldLabel>
-          <Input id="parentEmail" defaultValue={defaultValues.parentEmail} readOnly className={FILLED_INPUT} />
+          <Input
+            id="parentEmail"
+            name="parentEmail"
+            type="email"
+            required
+            defaultValue={defaultValues.parentEmail}
+            className={FILLED_INPUT}
+          />
           <FieldDescription>
-            This is the parent&apos;s login — create a new player record to change it.
+            This is the parent&apos;s login — changing it updates their sign-in email immediately.
           </FieldDescription>
         </Field>
         <Field>

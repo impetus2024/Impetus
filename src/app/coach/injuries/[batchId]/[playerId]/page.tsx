@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { InjuryReportsTable } from "@/components/injuries/injury-reports-table";
 import { AddInjuryDialog } from "@/components/injuries/add-injury-dialog";
 
@@ -17,7 +18,7 @@ export default async function CoachPlayerInjuriesPage({
     .from("batches")
     .select("id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) notFound();

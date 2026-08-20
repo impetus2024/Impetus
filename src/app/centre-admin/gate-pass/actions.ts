@@ -59,7 +59,7 @@ export async function createGatePassEntry(
 
   if (error) {
     logError(`Failed to record gate pass for player ${player.id}:`, error);
-    return { error: "Failed to record gate pass." };
+    return { error: "Failed to record movement pass." };
   }
 
   revalidatePath(PATH);

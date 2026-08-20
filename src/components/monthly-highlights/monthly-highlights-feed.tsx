@@ -17,7 +17,7 @@ export async function MonthlyHighlightsFeed({ centreId }: { centreId?: string })
   // Safe to call again here — verifySession is React-cache()'d per request,
   // so this doesn't re-hit the DB; the page's own requireRole already ran.
   const actor = await requireRole(...DASHBOARD_VIEWER_ROLES);
-  const { highlights } = await getMonthlyHighlights(1, centreId, actor.id);
+  const { highlights } = await getMonthlyHighlights(1, centreId, actor.id, true);
   const canShowImages = Boolean(process.env.R2_PUBLIC_URL);
 
   return (

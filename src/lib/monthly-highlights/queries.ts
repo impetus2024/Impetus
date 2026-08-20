@@ -34,10 +34,17 @@ export type MonthlyHighlightListItem = {
 // the viewing admin has personally dismissed from their own dashboard. See
 // getNewsEvents's sister implementation for why this filters client-side
 // after the page is fetched instead of via the main query.
+//
+// activeOnly: the 30-day expires_at cutoff (see 20260805030000_monthly_
+// highlights.sql) is meant to hide old highlights from the dashboard feed,
+// not delete them — the Monthly Highlights management page must keep
+// showing every highlight indefinitely. Defaults to false (every page.tsx
+// call site wants the full list); only MonthlyHighlightsFeed opts in.
 export async function getMonthlyHighlights(
   page: number,
   centreId?: string,
-  dismissedFor?: string
+  dismissedFor?: string,
+  activeOnly = false
 ): Promise<{ highlights: MonthlyHighlightListItem[]; count: number | null }> {
   const supabase = await createClient();
   const [from, to] = pageRange(page);
@@ -47,8 +54,11 @@ export async function getMonthlyHighlights(
     .select(
       "id, title, description, image_path, created_at, expires_at, monthly_highlight_centres!inner(centres(id, name))",
       { count: "exact" }
-    )
-    .gt("expires_at", new Date().toISOString());
+    );
+
+  if (activeOnly) {
+    query = query.gt("expires_at", new Date().toISOString());
+  }
 
   if (centreId) {
     query = query.eq("monthly_highlight_centres.centre_id", centreId);

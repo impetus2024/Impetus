@@ -15,7 +15,7 @@ export async function NewsEventsFeed({ centreId }: { centreId?: string }) {
   // Safe to call again here — verifySession is React-cache()'d per request,
   // so this doesn't re-hit the DB; the page's own requireRole already ran.
   const actor = await requireRole(...DASHBOARD_VIEWER_ROLES);
-  const { newsEvents } = await getNewsEvents(1, centreId, actor.id);
+  const { newsEvents } = await getNewsEvents(1, centreId, actor.id, true);
 
   return (
     <Card className="flex flex-col rounded-2xl border-border/70 shadow-card">

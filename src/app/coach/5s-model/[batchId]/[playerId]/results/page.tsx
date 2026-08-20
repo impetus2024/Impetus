@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FiveSResultsView } from "@/components/profile/five-s-results-view";
@@ -20,7 +21,7 @@ export default async function Coach5sModelResultsPage({
     .from("batches")
     .select("id, name")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) notFound();

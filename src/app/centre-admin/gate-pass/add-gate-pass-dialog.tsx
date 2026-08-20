@@ -39,10 +39,10 @@ export function AddGatePassDialog({ players }: { players: Player[] }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button>Add Gate Pass</Button>} />
+      <DialogTrigger render={<Button>Add Movement Pass</Button>} />
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Add Gate Pass</DialogTitle>
+          <DialogTitle>Add Movement Pass</DialogTitle>
         </DialogHeader>
         <form action={submit}>
           <FieldGroup>

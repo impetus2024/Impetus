@@ -112,6 +112,16 @@ CREATE TYPE "public"."user_role" AS ENUM (
 ALTER TYPE "public"."user_role" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."whatsapp_status" AS ENUM (
+    'sent',
+    'failed',
+    'skipped'
+);
+
+
+ALTER TYPE "public"."whatsapp_status" OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."email_analytics_summary"("p_centre_id" "uuid", "p_since" timestamp with time zone, "p_until" timestamp with time zone) RETURNS TABLE("sent_count" bigint, "delivered_count" bigint, "opened_count" bigint, "clicked_count" bigint, "bounced_count" bigint, "failed_count" bigint, "complained_count" bigint)
     LANGUAGE "sql" STABLE
     AS $$
@@ -342,16 +352,18 @@ begin
     recorded_by = excluded.recorded_by,
     updated_at = now();
 
-  insert into public.five_s_category_notes (player_id, category, centre_id, remarks, recorded_by)
+  insert into public.five_s_category_notes (player_id, category, centre_id, remarks, rating, recorded_by)
   values (
     (p_category_note->>'player_id')::uuid,
     (p_category_note->>'category')::public.five_s_category,
     (p_category_note->>'centre_id')::uuid,
     p_category_note->>'remarks',
+    (p_category_note->>'rating')::numeric,
     (p_category_note->>'recorded_by')::uuid
   )
   on conflict (player_id, category) do update set
     remarks = excluded.remarks,
+    rating = excluded.rating,
     centre_id = excluded.centre_id,
     recorded_by = excluded.recorded_by,
     updated_at = now();
@@ -450,7 +462,9 @@ CREATE TABLE IF NOT EXISTS "public"."batches" (
     "end_time" time without time zone NOT NULL,
     "is_active" boolean DEFAULT true NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "assistant_coach_id" "uuid",
+    CONSTRAINT "batches_assistant_coach_not_head" CHECK ((("assistant_coach_id" IS NULL) OR ("assistant_coach_id" <> "head_coach_id")))
 );
 
 
@@ -535,7 +549,9 @@ CREATE TABLE IF NOT EXISTS "public"."five_s_category_notes" (
     "remarks" "text" NOT NULL,
     "recorded_by" "uuid" NOT NULL,
     "recorded_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "rating" numeric(3,1),
+    CONSTRAINT "five_s_category_notes_rating_range" CHECK ((("rating" IS NULL) OR (("rating" >= (1)::numeric) AND ("rating" <= (5)::numeric) AND ("round"(("rating" * (2)::numeric)) = ("rating" * (2)::numeric)))))
 );
 
 
@@ -760,6 +776,22 @@ CREATE TABLE IF NOT EXISTS "public"."news_events" (
 ALTER TABLE "public"."news_events" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."package_change_logs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "centre_id" "uuid" NOT NULL,
+    "player_id" "uuid" NOT NULL,
+    "old_package_name" "text",
+    "old_amount" numeric(10,2),
+    "new_package_name" "text",
+    "new_amount" numeric(10,2),
+    "changed_by" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."package_change_logs" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."packages" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "centre_id" "uuid" NOT NULL,
@@ -799,11 +831,23 @@ CREATE TABLE IF NOT EXISTS "public"."payments" (
     "payment_date" "date" NOT NULL,
     "notes" "text",
     "recorded_by" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "is_registration_payment" boolean DEFAULT false NOT NULL
 );
 
 
 ALTER TABLE "public"."payments" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."player_batches" (
+    "player_id" "uuid" NOT NULL,
+    "batch_id" "uuid" NOT NULL,
+    "centre_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."player_batches" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."player_types" (
@@ -898,6 +942,23 @@ CREATE TABLE IF NOT EXISTS "public"."staff_profiles" (
 
 
 ALTER TABLE "public"."staff_profiles" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."whatsapp_logs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "centre_id" "uuid" NOT NULL,
+    "player_id" "uuid" NOT NULL,
+    "parent_profile_id" "uuid",
+    "recipient_phone" "text" NOT NULL,
+    "template_name" "text" NOT NULL,
+    "route_mobile_request_id" "text",
+    "status" "public"."whatsapp_status" NOT NULL,
+    "error_message" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."whatsapp_logs" OWNER TO "postgres";
 
 
 ALTER TABLE ONLY "public"."age_categories"
@@ -1070,6 +1131,11 @@ ALTER TABLE ONLY "public"."news_events"
 
 
 
+ALTER TABLE ONLY "public"."package_change_logs"
+    ADD CONSTRAINT "package_change_logs_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."packages"
     ADD CONSTRAINT "packages_pkey" PRIMARY KEY ("id");
 
@@ -1082,6 +1148,11 @@ ALTER TABLE ONLY "public"."parent_player_links"
 
 ALTER TABLE ONLY "public"."payments"
     ADD CONSTRAINT "payments_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."player_batches"
+    ADD CONSTRAINT "player_batches_pkey" PRIMARY KEY ("player_id", "batch_id");
 
 
 
@@ -1110,6 +1181,11 @@ ALTER TABLE ONLY "public"."staff_profiles"
 
 
 
+ALTER TABLE ONLY "public"."whatsapp_logs"
+    ADD CONSTRAINT "whatsapp_logs_pkey" PRIMARY KEY ("id");
+
+
+
 CREATE INDEX "age_categories_centre_id_idx" ON "public"."age_categories" USING "btree" ("centre_id");
 
 
@@ -1131,6 +1207,10 @@ CREATE INDEX "attendance_player_id_idx" ON "public"."attendance" USING "btree" (
 
 
 CREATE INDEX "batches_age_category_id_idx" ON "public"."batches" USING "btree" ("age_category_id");
+
+
+
+CREATE INDEX "batches_assistant_coach_id_idx" ON "public"."batches" USING "btree" ("assistant_coach_id");
 
 
 
@@ -1286,6 +1366,14 @@ CREATE INDEX "news_events_expires_at_idx" ON "public"."news_events" USING "btree
 
 
 
+CREATE INDEX "package_change_logs_centre_id_created_at_idx" ON "public"."package_change_logs" USING "btree" ("centre_id", "created_at");
+
+
+
+CREATE INDEX "package_change_logs_player_id_idx" ON "public"."package_change_logs" USING "btree" ("player_id");
+
+
+
 CREATE INDEX "packages_centre_id_idx" ON "public"."packages" USING "btree" ("centre_id");
 
 
@@ -1310,6 +1398,10 @@ CREATE INDEX "payments_centre_id_payment_date_idx" ON "public"."payments" USING 
 
 
 
+CREATE UNIQUE INDEX "payments_one_registration_per_player_idx" ON "public"."payments" USING "btree" ("player_id") WHERE "is_registration_payment";
+
+
+
 CREATE INDEX "payments_package_id_idx" ON "public"."payments" USING "btree" ("package_id");
 
 
@@ -1319,6 +1411,14 @@ CREATE INDEX "payments_player_id_idx" ON "public"."payments" USING "btree" ("pla
 
 
 CREATE INDEX "payments_recorded_by_idx" ON "public"."payments" USING "btree" ("recorded_by");
+
+
+
+CREATE INDEX "player_batches_batch_id_idx" ON "public"."player_batches" USING "btree" ("batch_id");
+
+
+
+CREATE INDEX "player_batches_centre_id_idx" ON "public"."player_batches" USING "btree" ("centre_id");
 
 
 
@@ -1355,6 +1455,22 @@ CREATE INDEX "players_player_type_id_idx" ON "public"."players" USING "btree" ("
 
 
 CREATE INDEX "profiles_centre_id_idx" ON "public"."profiles" USING "btree" ("centre_id");
+
+
+
+CREATE INDEX "whatsapp_logs_centre_id_created_at_idx" ON "public"."whatsapp_logs" USING "btree" ("centre_id", "created_at" DESC);
+
+
+
+CREATE INDEX "whatsapp_logs_player_id_idx" ON "public"."whatsapp_logs" USING "btree" ("player_id");
+
+
+
+CREATE UNIQUE INDEX "whatsapp_logs_route_mobile_request_id_idx" ON "public"."whatsapp_logs" USING "btree" ("route_mobile_request_id") WHERE ("route_mobile_request_id" IS NOT NULL);
+
+
+
+CREATE INDEX "whatsapp_logs_status_idx" ON "public"."whatsapp_logs" USING "btree" ("status");
 
 
 
@@ -1444,6 +1560,11 @@ ALTER TABLE ONLY "public"."attendance"
 
 ALTER TABLE ONLY "public"."batches"
     ADD CONSTRAINT "batches_age_category_id_fkey" FOREIGN KEY ("age_category_id") REFERENCES "public"."age_categories"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."batches"
+    ADD CONSTRAINT "batches_assistant_coach_id_fkey" FOREIGN KEY ("assistant_coach_id") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
 
 
 
@@ -1667,6 +1788,21 @@ ALTER TABLE ONLY "public"."news_events"
 
 
 
+ALTER TABLE ONLY "public"."package_change_logs"
+    ADD CONSTRAINT "package_change_logs_centre_id_fkey" FOREIGN KEY ("centre_id") REFERENCES "public"."centres"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."package_change_logs"
+    ADD CONSTRAINT "package_change_logs_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "public"."profiles"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."package_change_logs"
+    ADD CONSTRAINT "package_change_logs_player_id_fkey" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."packages"
     ADD CONSTRAINT "packages_centre_id_fkey" FOREIGN KEY ("centre_id") REFERENCES "public"."centres"("id") ON DELETE CASCADE;
 
@@ -1709,6 +1845,21 @@ ALTER TABLE ONLY "public"."payments"
 
 ALTER TABLE ONLY "public"."payments"
     ADD CONSTRAINT "payments_recorded_by_fkey" FOREIGN KEY ("recorded_by") REFERENCES "public"."profiles"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."player_batches"
+    ADD CONSTRAINT "player_batches_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "public"."batches"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."player_batches"
+    ADD CONSTRAINT "player_batches_centre_id_fkey" FOREIGN KEY ("centre_id") REFERENCES "public"."centres"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."player_batches"
+    ADD CONSTRAINT "player_batches_player_id_fkey" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE CASCADE;
 
 
 
@@ -1759,6 +1910,21 @@ ALTER TABLE ONLY "public"."profiles"
 
 ALTER TABLE ONLY "public"."staff_profiles"
     ADD CONSTRAINT "staff_profiles_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."whatsapp_logs"
+    ADD CONSTRAINT "whatsapp_logs_centre_id_fkey" FOREIGN KEY ("centre_id") REFERENCES "public"."centres"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."whatsapp_logs"
+    ADD CONSTRAINT "whatsapp_logs_parent_profile_id_fkey" FOREIGN KEY ("parent_profile_id") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."whatsapp_logs"
+    ADD CONSTRAINT "whatsapp_logs_player_id_fkey" FOREIGN KEY ("player_id") REFERENCES "public"."players"("id") ON DELETE CASCADE;
 
 
 
@@ -1827,6 +1993,10 @@ CREATE POLICY "centre_admin manages own centre news_event links" ON "public"."ne
 
 
 
+CREATE POLICY "centre_admin manages own centre package_change_logs" ON "public"."package_change_logs" USING ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"()))) WITH CHECK ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"())));
+
+
+
 CREATE POLICY "centre_admin manages own centre packages" ON "public"."packages" USING ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"()))) WITH CHECK ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"())));
 
 
@@ -1836,6 +2006,10 @@ CREATE POLICY "centre_admin manages own centre payments" ON "public"."payments" 
   WHERE (("p"."id" = "payments"."player_id") AND ("p"."centre_id" = "private"."user_centre_id"())))))) WITH CHECK ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"()) AND (EXISTS ( SELECT 1
    FROM "public"."players" "p"
   WHERE (("p"."id" = "payments"."player_id") AND ("p"."centre_id" = "private"."user_centre_id"()))))));
+
+
+
+CREATE POLICY "centre_admin manages own centre player_batches" ON "public"."player_batches" USING ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"()))) WITH CHECK ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"())));
 
 
 
@@ -1917,6 +2091,10 @@ CREATE POLICY "centre_admin views own centre injuries" ON "public"."injuries" FO
 
 
 
+CREATE POLICY "centre_admin views own centre whatsapp_logs" ON "public"."whatsapp_logs" FOR SELECT USING ((("private"."user_role"() = 'centre_admin'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"())));
+
+
+
 CREATE POLICY "centre_staff views own centre monthly_highlight_centres" ON "public"."monthly_highlight_centres" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['coach'::"public"."user_role", 'medical'::"public"."user_role", 'staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" = "private"."user_centre_id"())));
 
 
@@ -1940,83 +2118,104 @@ CREATE POLICY "centre_staff views own centre news_events" ON "public"."news_even
 ALTER TABLE "public"."centres" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "coach inserts five_s_results for own batch players" ON "public"."five_s_results" FOR INSERT WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("recorded_by" = "auth"."uid"()) AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
+
+
+
 CREATE POLICY "coach manages attendance for own batches" ON "public"."attendance" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND (EXISTS ( SELECT 1
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE (("p"."id" = "attendance"."player_id") AND ("b"."id" = "attendance"."batch_id") AND ("b"."head_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND (EXISTS ( SELECT 1
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE (("p"."id" = "attendance"."player_id") AND ("b"."id" = "attendance"."batch_id") AND ("b"."head_coach_id" = "auth"."uid"()))))));
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("pb"."player_id" = "attendance"."player_id") AND ("b"."id" = "attendance"."batch_id") AND (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND (EXISTS ( SELECT 1
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("pb"."player_id" = "attendance"."player_id") AND ("b"."id" = "attendance"."batch_id") AND (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))));
 
 
 
-CREATE POLICY "coach manages five_s_category_notes for own batch players" ON "public"."five_s_category_notes" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"()))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"())))));
+CREATE POLICY "coach manages five_s_category_notes for own batch players" ON "public"."five_s_category_notes" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach manages five_s_group_notes for own batch players" ON "public"."five_s_group_notes" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"()))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"())))));
+CREATE POLICY "coach manages five_s_group_notes for own batch players" ON "public"."five_s_group_notes" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach manages five_s_question_responses for own batch players" ON "public"."five_s_question_responses" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"()))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"())))));
+CREATE POLICY "coach manages five_s_question_responses for own batch players" ON "public"."five_s_question_responses" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach manages five_s_reports for own batch players" ON "public"."five_s_reports" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"()))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"())))));
+CREATE POLICY "coach manages five_s_reports for own batch players" ON "public"."five_s_reports" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach manages five_s_results for own batch players" ON "public"."five_s_results" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"()))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"())))));
+CREATE POLICY "coach manages injuries for own batch players" ON "public"."injuries" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach manages injuries for own batch players" ON "public"."injuries" USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"()))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "p"."id"
-   FROM ("public"."players" "p"
-     JOIN "public"."batches" "b" ON (("b"."id" = "p"."batch_id")))
-  WHERE ("b"."head_coach_id" = "auth"."uid"())))));
+CREATE POLICY "coach updates own five_s_results" ON "public"."five_s_results" FOR UPDATE USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("recorded_by" = "auth"."uid"()) AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"())))))) WITH CHECK ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("recorded_by" = "auth"."uid"()) AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach views own assigned batches" ON "public"."batches" FOR SELECT USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("head_coach_id" = "auth"."uid"())));
+CREATE POLICY "coach views five_s_results for own batch players" ON "public"."five_s_results" FOR SELECT USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("player_id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
-CREATE POLICY "coach views players in own batches" ON "public"."players" FOR SELECT USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("batch_id" IN ( SELECT "batches"."id"
+CREATE POLICY "coach views own assigned batches" ON "public"."batches" FOR SELECT USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND (("head_coach_id" = "auth"."uid"()) OR ("assistant_coach_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "coach views own batches player_batches" ON "public"."player_batches" FOR SELECT USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("batch_id" IN ( SELECT "batches"."id"
    FROM "public"."batches"
-  WHERE ("batches"."head_coach_id" = "auth"."uid"())))));
+  WHERE (("batches"."head_coach_id" = "auth"."uid"()) OR ("batches"."assistant_coach_id" = "auth"."uid"()))))));
+
+
+
+CREATE POLICY "coach views players in own batches" ON "public"."players" FOR SELECT USING ((("private"."user_role"() = 'coach'::"public"."user_role") AND ("id" IN ( SELECT "pb"."player_id"
+   FROM ("public"."player_batches" "pb"
+     JOIN "public"."batches" "b" ON (("b"."id" = "pb"."batch_id")))
+  WHERE (("b"."head_coach_id" = "auth"."uid"()) OR ("b"."assistant_coach_id" = "auth"."uid"()))))));
 
 
 
@@ -2070,6 +2269,10 @@ CREATE POLICY "medical views own centre batches" ON "public"."batches" FOR SELEC
 
 
 
+CREATE POLICY "medical views own centre player_batches" ON "public"."player_batches" FOR SELECT USING ((("private"."user_role"() = 'medical'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"())));
+
+
+
 CREATE POLICY "medical views own centre players" ON "public"."players" FOR SELECT USING ((("private"."user_role"() = 'medical'::"public"."user_role") AND ("centre_id" = "private"."user_centre_id"())));
 
 
@@ -2090,6 +2293,9 @@ ALTER TABLE "public"."news_event_dismissals" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."news_events" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."package_change_logs" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."packages" ENABLE ROW LEVEL SECURITY;
@@ -2207,6 +2413,9 @@ CREATE POLICY "parents view own links" ON "public"."parent_player_links" FOR SEL
 ALTER TABLE "public"."payments" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."player_batches" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."player_types" ENABLE ROW LEVEL SECURITY;
 
 
@@ -2274,11 +2483,19 @@ CREATE POLICY "staff_finance views own centre injuries" ON "public"."injuries" F
 
 
 
+CREATE POLICY "staff_finance views own centre package_change_logs" ON "public"."package_change_logs" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" = "private"."user_centre_id"())));
+
+
+
 CREATE POLICY "staff_finance views own centre packages" ON "public"."packages" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" = "private"."user_centre_id"())));
 
 
 
 CREATE POLICY "staff_finance views own centre payments" ON "public"."payments" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" = "private"."user_centre_id"())));
+
+
+
+CREATE POLICY "staff_finance views own centre player_batches" ON "public"."player_batches" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" = "private"."user_centre_id"())));
 
 
 
@@ -2297,6 +2514,10 @@ CREATE POLICY "staff_finance views own centre profiles" ON "public"."profiles" F
 CREATE POLICY "staff_finance views own centre staff_profiles" ON "public"."staff_profiles" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("profile_id" IN ( SELECT "profiles"."id"
    FROM "public"."profiles"
   WHERE ("profiles"."centre_id" = "private"."user_centre_id"())))));
+
+
+
+CREATE POLICY "staff_finance views own centre whatsapp_logs" ON "public"."whatsapp_logs" FOR SELECT USING ((("private"."user_role"() = ANY (ARRAY['staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" = "private"."user_centre_id"())));
 
 
 
@@ -2375,6 +2596,10 @@ CREATE POLICY "super_admin full access to news_events" ON "public"."news_events"
 
 
 
+CREATE POLICY "super_admin full access to package_change_logs" ON "public"."package_change_logs" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
+
+
+
 CREATE POLICY "super_admin full access to packages" ON "public"."packages" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
 
 
@@ -2384,6 +2609,10 @@ CREATE POLICY "super_admin full access to parent_player_links" ON "public"."pare
 
 
 CREATE POLICY "super_admin full access to payments" ON "public"."payments" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
+
+
+
+CREATE POLICY "super_admin full access to player_batches" ON "public"."player_batches" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
 
 
 
@@ -2400,6 +2629,10 @@ CREATE POLICY "super_admin full access to profiles" ON "public"."profiles" USING
 
 
 CREATE POLICY "super_admin full access to staff_profiles" ON "public"."staff_profiles" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
+
+
+
+CREATE POLICY "super_admin full access to whatsapp_logs" ON "public"."whatsapp_logs" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
 
 
 
@@ -2421,6 +2654,9 @@ CREATE POLICY "users manage own monthly_highlight dismissals" ON "public"."month
 
 CREATE POLICY "users manage own news_event dismissals" ON "public"."news_event_dismissals" USING (("user_id" = "auth"."uid"())) WITH CHECK (("user_id" = "auth"."uid"()));
 
+
+
+ALTER TABLE "public"."whatsapp_logs" ENABLE ROW LEVEL SECURITY;
 
 
 GRANT USAGE ON SCHEMA "public" TO "postgres";
@@ -2600,6 +2836,12 @@ GRANT ALL ON TABLE "public"."news_events" TO "service_role";
 
 
 
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."package_change_logs" TO "anon";
+GRANT ALL ON TABLE "public"."package_change_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."package_change_logs" TO "service_role";
+
+
+
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."packages" TO "anon";
 GRANT ALL ON TABLE "public"."packages" TO "authenticated";
 GRANT ALL ON TABLE "public"."packages" TO "service_role";
@@ -2615,6 +2857,12 @@ GRANT ALL ON TABLE "public"."parent_player_links" TO "service_role";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."payments" TO "anon";
 GRANT ALL ON TABLE "public"."payments" TO "authenticated";
 GRANT ALL ON TABLE "public"."payments" TO "service_role";
+
+
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."player_batches" TO "anon";
+GRANT ALL ON TABLE "public"."player_batches" TO "authenticated";
+GRANT ALL ON TABLE "public"."player_batches" TO "service_role";
 
 
 
@@ -2639,6 +2887,12 @@ GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."staff_profiles" TO "anon";
 GRANT ALL ON TABLE "public"."staff_profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."staff_profiles" TO "service_role";
+
+
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."whatsapp_logs" TO "anon";
+GRANT ALL ON TABLE "public"."whatsapp_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."whatsapp_logs" TO "service_role";
 
 
 

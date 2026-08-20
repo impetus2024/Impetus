@@ -42,7 +42,7 @@ export default async function BatchesPage({
   let query = supabase
     .from("batches")
     .select(
-      "id, name, head_coach_id, player_type_id, age_category_id, start_time, end_time, is_active, profiles!batches_head_coach_id_fkey(full_name), player_types(name), age_categories(name)",
+      "id, name, head_coach_id, assistant_coach_id, player_type_id, age_category_id, start_time, end_time, is_active, profiles!batches_head_coach_id_fkey(full_name), assistant_coach:profiles!batches_assistant_coach_id_fkey(full_name), player_types(name), age_categories(name)",
       { count: "exact" }
     )
     .eq("centre_id", centreAdmin.centre_id!);
@@ -121,6 +121,7 @@ export default async function BatchesPage({
           <TableRow>
             <TableHead>Batch</TableHead>
             <TableHead>Head Coach</TableHead>
+            <TableHead>Assistant Coach</TableHead>
             <TableHead>Program Type</TableHead>
             <TableHead>Age Category</TableHead>
             <TableHead>Time</TableHead>
@@ -133,6 +134,7 @@ export default async function BatchesPage({
             <TableRow key={batch.id}>
               <TableCell>{batch.name}</TableCell>
               <TableCell>{batch.profiles?.full_name}</TableCell>
+              <TableCell>{batch.assistant_coach?.full_name ?? "—"}</TableCell>
               <TableCell>{batch.player_types?.name ?? "—"}</TableCell>
               <TableCell>{batch.age_categories?.name}</TableCell>
               <TableCell>
@@ -159,7 +161,7 @@ export default async function BatchesPage({
           ))}
           {batches?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7}>
+              <TableCell colSpan={8}>
                 {hasFilters ? (
                   <EmptyState icon={CalendarCheck} title="No batches match your search" message="Try a different name or clear the filters." />
                 ) : (

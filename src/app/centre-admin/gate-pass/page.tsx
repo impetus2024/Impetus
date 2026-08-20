@@ -147,7 +147,7 @@ export default async function GatePassPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Gate Pass</h1>
+        <h1 className="text-2xl font-semibold">Movement Pass</h1>
         {canEdit && <AddGatePassDialog players={players ?? []} />}
       </div>
 
@@ -196,7 +196,7 @@ export default async function GatePassPage({
                 {hasFilters ? (
                   <EmptyState icon={DoorOpen} title="No entries match your search" message="Try a different name or clear the filters." />
                 ) : (
-                  <EmptyState icon={DoorOpen} title="No gate pass entries yet" />
+                  <EmptyState icon={DoorOpen} title="No movement pass entries yet" />
                 )}
               </TableCell>
             </TableRow>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { logError } from "@/lib/logger";
 
 export type AttendanceFormState = { error?: string } | undefined;
@@ -25,7 +26,7 @@ export async function markAttendance(
     .from("batches")
     .select("id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {

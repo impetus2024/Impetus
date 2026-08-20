@@ -23,7 +23,7 @@ import { getLastNMonths, monthKeyOf } from "@/lib/months";
 const QUICK_ACTIONS = [
   { href: "/centre-admin/players/new", label: "Add Player", icon: UserPlus },
   { href: "/centre-admin/batches", label: "Add Batch", icon: CalendarPlus },
-  { href: "/centre-admin/gate-pass", label: "Gate Pass", icon: DoorOpen },
+  { href: "/centre-admin/gate-pass", label: "Movement Pass", icon: DoorOpen },
   { href: "/centre-admin/payments", label: "Record Payment", icon: ReceiptText },
 ];
 
@@ -96,7 +96,7 @@ export default async function CentreAdminDashboard() {
         <InsightBanner
           tone="warning"
           title="No players yet"
-          message="Add your first player to start managing registrations and gate pass."
+          message="Add your first player to start managing registrations and movement pass."
           action={canEdit ? { href: "/centre-admin/players/new", label: "Add player" } : undefined}
         />
       ) : (
