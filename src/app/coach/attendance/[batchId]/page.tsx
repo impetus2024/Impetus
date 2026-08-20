@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import {
   Table,
   TableBody,
@@ -44,7 +45,7 @@ export default async function CoachBatchAttendancePage({
         .from("batches")
         .select("id, name")
         .eq("id", batchId)
-        .eq("head_coach_id", coach.id)
+        .or(coachBatchFilter(coach.id))
         .maybeSingle(),
       supabase
         .from("players")

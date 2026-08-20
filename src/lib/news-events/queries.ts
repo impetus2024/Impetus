@@ -28,10 +28,17 @@ export type NewsEventListItem = {
 // dismissed item just makes that page a few items shorter instead of
 // needing exact pagination math — fine for a "latest items" feed that
 // isn't paginated.
+//
+// activeOnly: the 30-day expires_at cutoff (see 20260805040000_news_events.sql)
+// is meant to hide old items from the dashboard feed, not delete them — the
+// News & Events management page must keep showing every item indefinitely.
+// Defaults to false (every page.tsx call site wants the full list); only
+// NewsEventsFeed opts in.
 export async function getNewsEvents(
   page: number,
   centreId?: string,
-  dismissedFor?: string
+  dismissedFor?: string,
+  activeOnly = false
 ): Promise<{ newsEvents: NewsEventListItem[]; count: number | null }> {
   const supabase = await createClient();
   const [from, to] = pageRange(page);
@@ -41,8 +48,11 @@ export async function getNewsEvents(
     .select(
       "id, type, title, description, event_date, created_at, expires_at, news_event_centres!inner(centres(id, name))",
       { count: "exact" }
-    )
-    .gt("expires_at", new Date().toISOString());
+    );
+
+  if (activeOnly) {
+    query = query.gt("expires_at", new Date().toISOString());
+  }
 
   if (centreId) {
     query = query.eq("news_event_centres.centre_id", centreId);

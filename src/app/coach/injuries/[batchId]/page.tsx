@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -28,7 +29,7 @@ export default async function CoachBatchInjuriesPage({
     .from("batches")
     .select("id, name")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) notFound();

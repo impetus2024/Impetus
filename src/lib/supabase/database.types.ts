@@ -124,6 +124,7 @@ export type Database = {
       batches: {
         Row: {
           age_category_id: string
+          assistant_coach_id: string | null
           centre_id: string
           created_at: string
           end_time: string
@@ -137,6 +138,7 @@ export type Database = {
         }
         Insert: {
           age_category_id: string
+          assistant_coach_id?: string | null
           centre_id: string
           created_at?: string
           end_time: string
@@ -150,6 +152,7 @@ export type Database = {
         }
         Update: {
           age_category_id?: string
+          assistant_coach_id?: string | null
           centre_id?: string
           created_at?: string
           end_time?: string
@@ -167,6 +170,13 @@ export type Database = {
             columns: ["age_category_id"]
             isOneToOne: false
             referencedRelation: "age_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_assistant_coach_id_fkey"
+            columns: ["assistant_coach_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {

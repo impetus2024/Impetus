@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ export function BatchFormDialog({
   defaultValues?: {
     name: string;
     headCoachId: string;
+    assistantCoachId: string | null;
     playerTypeId: string | null;
     ageCategoryId: string;
     startTime: string;
@@ -50,6 +52,9 @@ export function BatchFormDialog({
 }) {
   const { open, setOpen, pending, state, submit } =
     useDialogFormAction<BatchFormState>(action);
+  const [headCoachId, setHeadCoachId] = useState(defaultValues?.headCoachId ?? null);
+  const [assistantCoachId, setAssistantCoachId] = useState(defaultValues?.assistantCoachId ?? null);
+  const assistantCoachOptions = coaches.filter((c) => c.id !== headCoachId);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -74,6 +79,10 @@ export function BatchFormDialog({
               <Select
                 name="headCoachId"
                 defaultValue={defaultValues?.headCoachId}
+                onValueChange={(value) => {
+                  setHeadCoachId(value as string | null);
+                  if (value === assistantCoachId) setAssistantCoachId(null);
+                }}
                 required
               >
                 <SelectTrigger id="headCoachId" className="w-full">
@@ -89,6 +98,30 @@ export function BatchFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="assistantCoachId">Assistant Coach (optional)</FieldLabel>
+              <Select
+                name="assistantCoachId"
+                value={assistantCoachId}
+                onValueChange={(value) => setAssistantCoachId(value as string | null)}
+              >
+                <SelectTrigger id="assistantCoachId" className="w-full">
+                  <SelectValue placeholder="Select coach">
+                    {selectLabel(assistantCoachOptions, "Select coach")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {assistantCoachOptions.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Gets the same access as the head coach for this batch — attendance, roster, 5S, injuries.
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="playerTypeId">Program Type</FieldLabel>

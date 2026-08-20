@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
@@ -23,7 +24,7 @@ export default async function Coach5sModelPage() {
     supabase
       .from("batches")
       .select("id, name")
-      .eq("head_coach_id", coach.id)
+      .or(coachBatchFilter(coach.id))
       .eq("is_active", true)
       .order("name"),
     supabase

@@ -1,6 +1,7 @@
 import { CalendarCheck, Users, ClipboardCheck, ClipboardX, HeartPulse } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { StatCard } from "@/components/stat-card";
 import { InsightBanner } from "@/components/insight-banner";
 import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
@@ -33,7 +34,7 @@ export default async function CoachDashboard() {
   const { data: batches } = await supabase
     .from("batches")
     .select("id")
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .eq("is_active", true);
 
   const batchIds = (batches ?? []).map((b) => b.id);

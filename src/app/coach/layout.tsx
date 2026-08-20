@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { buildGreeting } from "@/lib/greeting";
 import { getOwnAvatarUrl } from "@/lib/staff/avatar";
 import { AppShell } from "@/components/shell/app-shell";
@@ -15,7 +16,7 @@ export default async function CoachLayout({
   const { count } = await supabase
     .from("batches")
     .select("id", { count: "exact", head: true })
-    .eq("head_coach_id", profile.id)
+    .or(coachBatchFilter(profile.id))
     .eq("is_active", true);
 
   const { title, dateLine } = buildGreeting(

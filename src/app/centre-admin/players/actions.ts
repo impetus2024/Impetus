@@ -763,6 +763,7 @@ export async function updatePlayerProfile(
 const ParentProfileSchema = z.object({
   fatherName: z.string().optional(),
   motherName: z.string().optional(),
+  parentEmail: z.email({ error: "Enter a valid parent/guardian email." }),
   parentContactNumber: z.string().optional(),
   addressLine1: z.string().optional(),
   addressLine2: z.string().optional(),
@@ -781,6 +782,7 @@ export async function updateParentProfile(
   const parsed = ParentProfileSchema.safeParse({
     fatherName: optionalStr(formData.get("fatherName")),
     motherName: optionalStr(formData.get("motherName")),
+    parentEmail: formData.get("parentEmail"),
     parentContactNumber: optionalStr(formData.get("parentContactNumber")),
     addressLine1: optionalStr(formData.get("addressLine1")),
     addressLine2: optionalStr(formData.get("addressLine2")),
@@ -808,9 +810,60 @@ export async function updateParentProfile(
     parentContactNumber = phoneResult.value;
   }
 
+  const supabase = await createClient();
+  const admin = createAdminClient();
+
+  const { data: existing } = await supabase
+    .from("players")
+    .select("parent_email")
+    .eq("id", id)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .maybeSingle();
+
+  // The email doubles as the parent's login, so changing it here must also
+  // change their actual auth.users email (handle_auth_user_sync then syncs
+  // it into profiles.email) -- not just this denormalized column. Every
+  // sibling player's parent_email is kept in sync too, since
+  // resolveParentProfileId below looks accounts up by email: a stale copy
+  // left on another child would stop matching the parent's new email and
+  // provision a duplicate account for them.
+  if (existing && existing.parent_email !== d.parentEmail) {
+    const { data: link } = await admin
+      .from("parent_player_links")
+      .select("parent_id")
+      .eq("player_id", id)
+      .maybeSingle();
+
+    if (link) {
+      const { error: emailError } = await admin.auth.admin.updateUserById(link.parent_id, {
+        email: d.parentEmail,
+        email_confirm: true,
+      });
+      if (emailError) {
+        const message =
+          emailError.code === "email_exists"
+            ? "An account with this email already exists — they may already be registered under a different role or centre."
+            : "Failed to update the parent's login email.";
+        return { error: message };
+      }
+
+      const { data: siblingLinks } = await admin
+        .from("parent_player_links")
+        .select("player_id")
+        .eq("parent_id", link.parent_id);
+      const siblingIds = (siblingLinks ?? [])
+        .map((l) => l.player_id)
+        .filter((playerId) => playerId !== id);
+      if (siblingIds.length) {
+        await admin.from("players").update({ parent_email: d.parentEmail }).in("id", siblingIds);
+      }
+    }
+  }
+
   const update: PlayerUpdate = {
     father_name: d.fatherName ?? null,
     mother_name: d.motherName ?? null,
+    parent_email: d.parentEmail,
     parent_contact_number: parentContactNumber,
     address_line1: d.addressLine1 ?? null,
     address_line2: d.addressLine2 ?? null,
@@ -820,7 +873,6 @@ export async function updateParentProfile(
     pincode: d.pincode ?? null,
   };
 
-  const supabase = await createClient();
   const { data: player, error } = await supabase
     .from("players")
     .update(update)
@@ -847,7 +899,6 @@ export async function updateParentProfile(
         player.parent_email,
         d.fatherName || d.motherName || "Parent"
       );
-      const admin = createAdminClient();
       await admin.from("parent_player_links").upsert(
         { parent_id: parentProfileId, player_id: id, centre_id: centreAdmin.centre_id! },
         { onConflict: "parent_id,player_id" }

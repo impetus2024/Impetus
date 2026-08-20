@@ -8,14 +8,20 @@ import { logError } from "@/lib/logger";
 
 const PATH = "/centre-admin/batches";
 
-const BatchSchema = z.object({
-  name: z.string().min(1, { error: "Batch name is required." }),
-  headCoachId: z.uuid({ error: "Select a head coach." }),
-  playerTypeId: z.string().optional(),
-  ageCategoryId: z.uuid({ error: "Select an age category." }),
-  startTime: z.string().min(1, { error: "Start time is required." }),
-  endTime: z.string().min(1, { error: "End time is required." }),
-});
+const BatchSchema = z
+  .object({
+    name: z.string().min(1, { error: "Batch name is required." }),
+    headCoachId: z.uuid({ error: "Select a head coach." }),
+    assistantCoachId: z.uuid().optional(),
+    playerTypeId: z.string().optional(),
+    ageCategoryId: z.uuid({ error: "Select an age category." }),
+    startTime: z.string().min(1, { error: "Start time is required." }),
+    endTime: z.string().min(1, { error: "End time is required." }),
+  })
+  .refine((d) => d.assistantCoachId !== d.headCoachId, {
+    error: "Assistant coach must be different from the head coach.",
+    path: ["assistantCoachId"],
+  });
 
 export type BatchFormState = { error?: string } | undefined;
 
@@ -23,6 +29,8 @@ function parseBatch(formData: FormData) {
   return BatchSchema.safeParse({
     name: formData.get("name"),
     headCoachId: formData.get("headCoachId"),
+    assistantCoachId:
+      (formData.get("assistantCoachId") as string | null) || undefined,
     playerTypeId:
       (formData.get("playerTypeId") as string | null) || undefined,
     ageCategoryId: formData.get("ageCategoryId"),
@@ -47,6 +55,7 @@ export async function createBatch(
     centre_id: centreAdmin.centre_id!,
     name: parsed.data.name,
     head_coach_id: parsed.data.headCoachId,
+    assistant_coach_id: parsed.data.assistantCoachId ?? null,
     player_type_id: parsed.data.playerTypeId ?? null,
     age_category_id: parsed.data.ageCategoryId,
     start_time: parsed.data.startTime,
@@ -80,6 +89,7 @@ export async function updateBatch(
     .update({
       name: parsed.data.name,
       head_coach_id: parsed.data.headCoachId,
+      assistant_coach_id: parsed.data.assistantCoachId ?? null,
       player_type_id: parsed.data.playerTypeId ?? null,
       age_category_id: parsed.data.ageCategoryId,
       start_time: parsed.data.startTime,

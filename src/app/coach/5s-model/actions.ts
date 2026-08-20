@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { isFiveSWindowOpen } from "@/lib/five-s/testing-window";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
 import { vo2MaxFromBeepTest, vo2MaxFromCooperTest } from "@/lib/five-s/vo2-max";
@@ -85,7 +86,7 @@ export async function submitSpeedScores(
     .from("batches")
     .select("id, centre_id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {
@@ -160,7 +161,7 @@ export async function submitStrengthScores(
     .from("batches")
     .select("id, centre_id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {
@@ -236,7 +237,7 @@ export async function submitStaminaScores(
     .from("batches")
     .select("id, centre_id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {
@@ -365,7 +366,7 @@ export async function submitSpiritResponses(
     .from("batches")
     .select("id, centre_id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {
@@ -454,7 +455,7 @@ export async function submitSkillScores(
     .from("batches")
     .select("id, centre_id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {
@@ -586,7 +587,7 @@ export async function publishFiveSReport(
     .from("batches")
     .select("id, centre_id")
     .eq("id", batchId)
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .maybeSingle();
 
   if (!batch) {

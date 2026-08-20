@@ -27,6 +27,7 @@ export const SUPER_ADMIN_NAV: NavGroup[] = [
     label: "Management",
     items: [
       { href: "/super-admin/centres", label: "Centre Management", icon: Building2 },
+      { href: "/super-admin/administrators", label: "Super Admins", icon: UserCog },
       { href: "/super-admin/5s-model", label: "5S Model", icon: Sparkles },
     ],
   },
@@ -48,7 +49,7 @@ export const CENTRE_ADMIN_NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { href: "/centre-admin/gate-pass", label: "Gate Pass", icon: DoorOpen },
+      { href: "/centre-admin/gate-pass", label: "Movement Pass", icon: DoorOpen },
       { href: "/centre-admin/batches", label: "Batch Management", icon: CalendarCheck },
       { href: "/centre-admin/players", label: "Player Management", icon: Users },
       { href: "/centre-admin/player-types", label: "Program Type", icon: Tag },

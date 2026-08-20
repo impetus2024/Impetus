@@ -5,7 +5,6 @@ import { requireRole } from "@/lib/auth/dal";
 import { getParentChildren } from "@/lib/parent/children";
 import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
 import { Card, CardContent } from "@/components/ui/card";
-import { InjuryReportsTable } from "@/components/injuries/injury-reports-table";
 import { ProfileCard } from "@/components/profile/profile-card";
 import { ProfileMenu, type ProfileSection } from "@/components/profile/profile-menu";
 import { AttendanceCalendar } from "@/components/profile/attendance-calendar";
@@ -36,7 +35,6 @@ export default async function ParentPlayerPage({
     "packageDetails",
     "documents",
     "attendance",
-    "injuries",
     "5s",
   ];
   const section: ProfileSection = validSections.includes(sectionParam as ProfileSection)
@@ -139,7 +137,7 @@ async function PlayerProfileSections({
             <ProfileMenu
               basePath={basePath}
               active={section}
-              sections={["profile", "parent", "packageDetails", "documents", "attendance", "injuries", "5s"]}
+              sections={["profile", "parent", "packageDetails", "documents", "attendance", "5s"]}
             />
           </CardContent>
         </Card>
@@ -225,16 +223,6 @@ async function PlayerProfileSections({
 
           {section === "attendance" && (
             <AttendanceCalendar playerId={playerId} month={month} basePath={`${basePath}&section=attendance`} />
-          )}
-
-          {section === "injuries" && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold">Injuries</h2>
-                <p className="text-sm text-muted-foreground">Reported by coach or medical staff</p>
-              </div>
-              <InjuryReportsTable playerId={playerId} />
-            </div>
           )}
 
           {section === "5s" && (

@@ -17,6 +17,7 @@ export function BatchRowActions({
     id: string;
     name: string;
     head_coach_id: string;
+    assistant_coach_id: string | null;
     player_type_id: string | null;
     age_category_id: string;
     start_time: string;
@@ -45,6 +46,7 @@ export function BatchRowActions({
         defaultValues={{
           name: batch.name,
           headCoachId: batch.head_coach_id,
+          assistantCoachId: batch.assistant_coach_id,
           playerTypeId: batch.player_type_id,
           ageCategoryId: batch.age_category_id,
           startTime: batch.start_time,

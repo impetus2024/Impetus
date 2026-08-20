@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
+import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -20,7 +21,7 @@ export default async function CoachBatchesPage() {
   const { data: batches } = await supabase
     .from("batches")
     .select("id, name, start_time, end_time, age_categories(name), player_types(name)")
-    .eq("head_coach_id", coach.id)
+    .or(coachBatchFilter(coach.id))
     .eq("is_active", true)
     .order("name");
 
