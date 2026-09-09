@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { WEEKDAYS, MONTH_NAMES, toDateKey, monthParam, parseMonthParam, buildCalendarGrid } from "@/lib/calendar-grid";
 
 // Glossy, embossed dot: a colored glow shadow beneath plus a soft inset
 // highlight/shade so it reads as a small raised bead, not a flat circle.
@@ -14,45 +15,6 @@ const DOT_STYLE = {
   notMarked:
     "bg-status-warning shadow-[0_2px_6px_-1px_rgba(250,178,25,0.55),inset_0_1px_1px_rgba(255,255,255,0.6),inset_0_-1px_1.5px_rgba(0,0,0,0.12)]",
 } as const;
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-function toDateKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function monthParam(year: number, month: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}`;
-}
-
-function parseMonthParam(month?: string) {
-  if (month && /^\d{4}-\d{2}$/.test(month)) {
-    const [y, m] = month.split("-").map(Number);
-    return { year: y, month: m - 1 };
-  }
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() };
-}
-
-// Full weeks (including the leading/trailing days from adjacent months
-// needed to fill the grid), sized to exactly however many weeks the month
-// needs — 5 most months, 6 for a few.
-function buildCalendarGrid(year: number, month: number) {
-  const firstOfMonth = new Date(year, month, 1);
-  const gridStart = new Date(year, month, 1 - firstOfMonth.getDay());
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const totalCells = Math.ceil((firstOfMonth.getDay() + daysInMonth) / 7) * 7;
-
-  return Array.from({ length: totalCells }, (_, i) => {
-    const d = new Date(gridStart);
-    d.setDate(gridStart.getDate() + i);
-    return d;
-  });
-}
 
 export async function AttendanceCalendar({
   playerId,
