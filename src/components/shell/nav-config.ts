@@ -51,6 +51,7 @@ export const CENTRE_ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/centre-admin/gate-pass", label: "Movement Pass", icon: DoorOpen },
       { href: "/centre-admin/batches", label: "Batch Management", icon: CalendarCheck },
+      { href: "/centre-admin/coach-attendance", label: "Coach Attendance", icon: ClipboardCheck },
       { href: "/centre-admin/players", label: "Player Management", icon: Users },
       { href: "/centre-admin/player-types", label: "Program Type", icon: Tag },
       { href: "/centre-admin/5s-model", label: "5S Model", icon: Sparkles },
