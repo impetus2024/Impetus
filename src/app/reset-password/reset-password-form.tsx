@@ -7,7 +7,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { AuthShell } from "@/components/auth/auth-shell";
 import { updatePassword, type ResetPasswordState } from "./actions";
 
-export function ResetPasswordForm() {
+export function ResetPasswordForm({ required = false }: { required?: boolean }) {
   const [state, action, pending] = useActionState<ResetPasswordState, FormData>(
     updatePassword,
     undefined
@@ -19,7 +19,9 @@ export function ResetPasswordForm() {
         Set a new password
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Choose a new password for your account.
+        {required
+          ? "Your account is using a temporary password. Choose your own password to continue."
+          : "Choose a new password for your account."}
       </p>
       <div className="mt-8">
         <form action={action}>

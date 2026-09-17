@@ -7,7 +7,8 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
-import { provisionUser } from "@/lib/auth/provision-user";
+import { provisionUser, generatePasswordSetupLink } from "@/lib/auth/provision-user";
+import { sendEmailChangedEmail } from "@/lib/email/send";
 import { sendWhatsAppWelcomeTemplate } from "@/lib/whatsapp/send";
 import { normalizeContactNumber } from "@/lib/phone";
 import { encryptField } from "@/lib/crypto/field-encryption";
@@ -895,6 +896,14 @@ export async function updateParentProfile(
     return { error: MULTIPLE_PARENT_LOGINS_MESSAGE };
   }
 
+  // Populated only once the parent's auth email has actually moved, and only
+  // read after every write below has succeeded — the notification must never
+  // go out for a change that was rolled back or never happened. Left null
+  // when the address is unchanged (including a case-only difference, see
+  // emailsEqual above), which is what keeps an ordinary profile save from
+  // emailing anyone.
+  let emailChangeNotice: { parentId: string; previousEmail: string } | null = null;
+
   if (existing && (emailChanging || !emailsEqual(linkedParentEmail, d.parentEmail))) {
     if (link) {
       const { error: emailError } = await admin.auth.admin.updateUserById(link.parent_id, {
@@ -931,6 +940,31 @@ export async function updateParentProfile(
             ? EMAIL_IN_USE_MESSAGE
             : "Failed to update the parent's login email.";
         return { error: message };
+      }
+
+      // The address on the account has moved at this point. Record what it
+      // moved from, for the de-duplication key below. players.parent_email is
+      // the right side of that pair rather than profiles.email: it is what
+      // this form was displaying and it is only written once everything below
+      // has succeeded, so a re-submit after a failed sibling sync still
+      // produces the same key and still sends exactly one notification.
+      emailChangeNotice = {
+        parentId: link.parent_id,
+        previousEmail: existing.parent_email ?? linkedParentEmail ?? "",
+      };
+
+      // The login identity just changed under whoever is holding a session on
+      // this account. Same hardening, same caveats, as resetUserPassword and
+      // setAdministratorActive — logged rather than thrown, because the email
+      // change itself has already succeeded and matters more.
+      const { error: revokeError } = await admin.rpc("revoke_user_sessions", {
+        target_user_id: link.parent_id,
+      });
+      if (revokeError) {
+        logError(
+          `Failed to revoke existing sessions for parent ${link.parent_id} after an email change:`,
+          revokeError
+        );
       }
 
       // Sibling sync must not silently no-op: a failed read would look like
@@ -1017,8 +1051,55 @@ export async function updateParentProfile(
     }
   }
 
+  // Last, deliberately: every auth and database write above has succeeded by
+  // this point, so a notification can never claim a change that didn't stick.
+  // Any earlier failure returns above with emailChangeNotice either unset or
+  // simply never read.
+  //
+  // Only the NEW address is contacted. The old one gets nothing — it may
+  // belong to someone with no connection to this account any more — and
+  // nothing in the message is a credential: the parent's password is
+  // untouched by an email change, and the setup link is Supabase's own
+  // single-use recovery link, not something this app minted.
+  let emailChangeNotified = true;
+  if (emailChangeNotice) {
+    const newEmail = player?.parent_email ?? d.parentEmail;
+    try {
+      const passwordSetupUrl = await generatePasswordSetupLink(newEmail);
+      await sendEmailChangedEmail({
+        to: newEmail,
+        fullName: d.fatherName || d.motherName || "Parent",
+        passwordSetupUrl,
+        loginUrl: absoluteUrl("/login"),
+        recipientProfileId: emailChangeNotice.parentId,
+        centreId: centreAdmin.centre_id!,
+        // Stable across retries of the same change, distinct per change, and
+        // enforced by a unique index on email_logs — so a double-submit or a
+        // re-run after a partial failure sends one email, not two. The one
+        // case it also suppresses is changing an address away and back to a
+        // previous value, which would reuse the same key; that recipient has
+        // already had this exact notice.
+        idempotencyKey: `email_changed:${emailChangeNotice.parentId}:${emailChangeNotice.previousEmail.toLowerCase()}->${newEmail.toLowerCase()}`,
+      });
+    } catch (err) {
+      // The change itself stands — reporting it as a failed save would be
+      // wrong and would invite a retry that changes nothing. Surfaced to the
+      // operator instead (and recorded as a failed email_logs row inside
+      // sendEmailChangedEmail) so the parent can be told out of band.
+      emailChangeNotified = false;
+      logError(`Email-change notification not sent to ${newEmail} for player ${id}:`, err);
+    }
+  }
+
   revalidatePath(PATH);
   revalidatePath(`/centre-admin/players/${id}`);
+
+  if (!emailChangeNotified) {
+    return {
+      error:
+        "Saved, and the parent's login email was changed — but we couldn't email them about it. Let them know their new sign-in address directly.",
+    };
+  }
   return undefined;
 }
 

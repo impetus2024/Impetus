@@ -257,6 +257,7 @@ export type Database = {
           error_message: string | null
           failed_at: string | null
           id: string
+          idempotency_key: string | null
           open_count: number
           opened_at: string | null
           recipient_email: string
@@ -279,6 +280,7 @@ export type Database = {
           error_message?: string | null
           failed_at?: string | null
           id?: string
+          idempotency_key?: string | null
           open_count?: number
           opened_at?: string | null
           recipient_email: string
@@ -301,6 +303,7 @@ export type Database = {
           error_message?: string | null
           failed_at?: string | null
           id?: string
+          idempotency_key?: string | null
           open_count?: number
           opened_at?: string | null
           recipient_email?: string
@@ -1667,6 +1670,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          must_change_password: boolean
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
@@ -1677,6 +1681,7 @@ export type Database = {
           full_name?: string
           id: string
           is_active?: boolean
+          must_change_password?: boolean
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -1687,6 +1692,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          must_change_password?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
