@@ -31,6 +31,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const linkExpired = searchParams.get("error") === "invalid-reset-link";
+  const resetSucceeded = searchParams.get("reset") === "success";
 
   const disabled =
     searchParams.get("disabled") === "1" || state?.error === ACCOUNT_DISABLED_MESSAGE;
@@ -77,6 +78,11 @@ export function LoginForm() {
           {linkExpired && (
             <FieldDescription className="text-destructive">
               That reset link is invalid or has expired. Request a new one below.
+            </FieldDescription>
+          )}
+          {resetSucceeded && (
+            <FieldDescription>
+              Your password has been updated. Sign in with your new password.
             </FieldDescription>
           )}
           {state?.error && state.error !== ACCOUNT_DISABLED_MESSAGE && (

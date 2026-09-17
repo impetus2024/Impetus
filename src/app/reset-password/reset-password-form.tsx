@@ -26,11 +26,24 @@ export function ResetPasswordForm({ required = false }: { required?: boolean }) 
       <div className="mt-8">
         <form action={action}>
           <FieldGroup>
+            <input type="hidden" name="required" value={required ? "1" : ""} />
             <Field>
               <FieldLabel htmlFor="password">New password</FieldLabel>
               <Input
                 id="password"
                 name="password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                className="h-11 rounded-xl px-3.5"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="confirmPassword">Confirm new password</FieldLabel>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
                 type="password"
                 autoComplete="new-password"
                 minLength={8}
