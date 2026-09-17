@@ -7,9 +7,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { roleHome, type UserRole } from "@/lib/auth/dal";
 import { logError, logWarning } from "@/lib/logger";
 
-const ResetPasswordSchema = z.object({
-  password: z.string().min(8, { error: "Password must be at least 8 characters." }),
-});
+const ResetPasswordSchema = z
+  .object({
+    password: z.string().min(8, { error: "Password must be at least 8 characters." }),
+    confirmPassword: z.string().min(1, { error: "Confirm your new password." }),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    error: "Password and confirmation don't match.",
+    path: ["confirmPassword"],
+  });
 
 export type ResetPasswordState = { error?: string } | undefined;
 
@@ -19,6 +25,7 @@ export async function updatePassword(
 ): Promise<ResetPasswordState> {
   const parsed = ResetPasswordSchema.safeParse({
     password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
   });
 
   if (!parsed.success) {
@@ -57,5 +64,21 @@ export async function updatePassword(
     }
   }
 
-  redirect(profile ? roleHome(profile.role as UserRole) : "/login");
+  // A recovery link establishes a session for the sole purpose of setting a
+  // password. Leaving it live would mean anyone who opened that one-time
+  // emailed link is now signed into the account, so end it and make them prove
+  // they know the password they just chose.
+  //
+  // The forced-change path (?required=1) is deliberately not signed out: that
+  // user reached this page from an ordinary session they authenticated for, so
+  // bouncing them to /login would make them type a password they set seconds
+  // ago. They continue to their dashboard as before.
+  const required = formData.get("required") === "1";
+
+  if (!required || !profile) {
+    await supabase.auth.signOut();
+    redirect("/login?reset=success");
+  }
+
+  redirect(roleHome(profile.role as UserRole));
 }

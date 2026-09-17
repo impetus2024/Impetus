@@ -1,3 +1,4 @@
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
 /**
@@ -60,3 +61,32 @@ export const TEST_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64"
 );
+
+// Service-role access for the recovery specs: they need to mint a real
+// Supabase recovery token and to create/remove their own throwaway account,
+// so they never touch the seeded TEST_ACCOUNTS (whose password other specs
+// depend on). Undefined when the key isn't exported — the specs skip rather
+// than fail, the same way they skip without DEV_DEFAULT_PASSWORD.
+export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+export const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+export function adminClient() {
+  return createSupabaseClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+// Mirrors generatePasswordSetupLink (src/lib/auth/provision-user.ts): the
+// emailed link points at the app's own /auth/confirm with the token_hash,
+// never at Supabase's action_link — that one resolves through the implicit
+// grant and puts the tokens in a URL fragment the server can't read.
+export async function recoveryLinkFor(email: string): Promise<string> {
+  const { data, error } = await adminClient().auth.admin.generateLink({
+    type: "recovery",
+    email,
+  });
+  if (error || !data?.properties?.hashed_token) {
+    throw new Error(`Could not mint a recovery token: ${error?.message ?? "no hashed_token"}`);
+  }
+  return `/auth/confirm?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=recovery`;
+}

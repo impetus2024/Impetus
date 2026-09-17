@@ -50,9 +50,22 @@ async function flagPasswordChangeRequired(userId: string): Promise<void> {
 // short-lived, invalidated once used), so nothing here is a credential this
 // app created or has to store.
 //
-// redirectTo is the same bare /auth/confirm path requestPasswordReset uses —
-// Supabase's redirect allowlist matches exact URLs, so both flows must point
-// at the same one (see forgot-password/actions.ts).
+// Deliberately built from `hashed_token` rather than returned as Supabase's
+// own `action_link`. action_link points at GoTrue's /auth/v1/verify, and
+// because this runs on the service-role client there is no PKCE code verifier
+// for it to pair with — so GoTrue resolves it through the *implicit* grant and
+// redirects to /auth/confirm with #access_token=... in the URL *fragment*.
+// Fragments are never sent to the server, so /auth/confirm (a Route Handler)
+// saw neither `code` nor `token_hash` and bounced every one of these links to
+// /login?error=invalid-reset-link. requestPasswordReset never hit this because
+// it runs on the @supabase/ssr client, which is PKCE and does get `?code=`.
+//
+// hashed_token is the same token in the form verifyOtp() consumes, so pointing
+// straight at /auth/confirm keeps the whole exchange server-side: no fragment,
+// and the link therefore also survives being opened in a new tab or a
+// different browser from the one that triggered the change. No redirect
+// allowlist entry is needed either, since Supabase is no longer doing the
+// redirecting.
 //
 // Returns null rather than throwing: the caller's email still has a usable
 // fallback ("Forgot password?"), and a link failure must not undo a change
@@ -62,15 +75,17 @@ export async function generatePasswordSetupLink(email: string): Promise<string |
   const { data, error } = await admin.auth.admin.generateLink({
     type: "recovery",
     email,
-    options: { redirectTo: absoluteUrl("/auth/confirm") },
   });
 
-  if (error || !data?.properties?.action_link) {
+  if (error || !data?.properties?.hashed_token) {
     logWarning(`Could not generate a password setup link for ${email}:`, error);
     return null;
   }
 
-  return data.properties.action_link;
+  const url = new URL(absoluteUrl("/auth/confirm"));
+  url.searchParams.set("token_hash", data.properties.hashed_token);
+  url.searchParams.set("type", "recovery");
+  return url.toString();
 }
 
 // Shared by every "create an account for someone else" flow (Super Admin
