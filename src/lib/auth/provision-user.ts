@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import type { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAccountInviteEmail } from "@/lib/email/send";
+import { absoluteUrl } from "@/lib/url";
 import { logError, logWarning } from "@/lib/logger";
 import type { UserRole } from "@/lib/auth/roles";
 
@@ -22,6 +23,54 @@ function generateTempPassword(): string {
   // ambiguous characters to transcribe since it's only ever emailed, not
   // typed from a printout.
   return randomBytes(18).toString("base64url");
+}
+
+// Marks an account as holding a temporary credential. verifySession
+// (src/lib/auth/dal.ts) then sends the owner to /reset-password until they
+// have replaced it, so an emailed temp password can't quietly stay valid for
+// the life of the account.
+//
+// Non-fatal on failure, same reasoning as revoke_user_sessions below: the
+// password change/account creation it accompanies has already happened and
+// matters more than this hardening step. Written on the service-role client —
+// the column is locked against authenticated writes (see its migration).
+async function flagPasswordChangeRequired(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ must_change_password: true })
+    .eq("id", userId);
+  if (error) {
+    logError(`Failed to flag must_change_password for user ${userId}:`, error);
+  }
+}
+
+// One-time link the recipient can use to set their own password, as an
+// alternative to being sent a generated one. Supabase mints it (single-use,
+// short-lived, invalidated once used), so nothing here is a credential this
+// app created or has to store.
+//
+// redirectTo is the same bare /auth/confirm path requestPasswordReset uses —
+// Supabase's redirect allowlist matches exact URLs, so both flows must point
+// at the same one (see forgot-password/actions.ts).
+//
+// Returns null rather than throwing: the caller's email still has a usable
+// fallback ("Forgot password?"), and a link failure must not undo a change
+// that already succeeded.
+export async function generatePasswordSetupLink(email: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: { redirectTo: absoluteUrl("/auth/confirm") },
+  });
+
+  if (error || !data?.properties?.action_link) {
+    logWarning(`Could not generate a password setup link for ${email}:`, error);
+    return null;
+  }
+
+  return data.properties.action_link;
 }
 
 // Shared by every "create an account for someone else" flow (Super Admin
@@ -62,6 +111,8 @@ export async function provisionUser(params: {
   if (error || !data.user) {
     throw error ?? new Error("Failed to create user");
   }
+
+  await flagPasswordChangeRequired(data.user.id);
 
   // The account is already usable at this point (password is set above).
   // Email delivery is a notification, not a precondition — don't undo the
@@ -108,6 +159,8 @@ export async function resetUserPassword(params: {
     password: tempPassword,
   });
   if (error) throw error;
+
+  await flagPasswordChangeRequired(userId);
 
   // Penetration test finding: changing the password alone left any
   // already-issued session usable — confirmed live, an old access token

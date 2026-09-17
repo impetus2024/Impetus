@@ -3,6 +3,7 @@
 import * as z from "zod";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySession } from "@/lib/auth/dal";
 import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
 import { logError } from "@/lib/logger";
@@ -82,6 +83,18 @@ export async function changeOwnPassword(
   if (updateError) {
     logError(`Failed to change password for ${profile.id}:`, updateError);
     return { error: "Failed to update password — try again." };
+  }
+
+  // Same rule as the /reset-password flow: the temporary-credential flag is
+  // cleared only after the password actually changed. Non-fatal here — the
+  // password change stands either way, and an account that still carries the
+  // flag is simply sent back through /reset-password, which clears it.
+  const { error: flagError } = await createAdminClient()
+    .from("profiles")
+    .update({ must_change_password: false })
+    .eq("id", profile.id);
+  if (flagError) {
+    logError(`Failed to clear must_change_password for ${profile.id}:`, flagError);
   }
 
   return { success: true };

@@ -59,7 +59,34 @@ is Vercel-specific beyond that assumption, but the steps below are written for i
    Actions, downloads are short-lived signed URLs generated server-side); the browser never talks
    to R2 directly.
 
-## 3. Sentry (optional but recommended)
+## 3. Resend (transactional email)
+
+Every email this app sends is transactional and goes through Resend (`src/lib/email/send.ts`):
+the account invite that carries a newly provisioned account's temporary password, the admin
+password reset, and the "your sign-in email has been updated" notice sent to a parent's new
+address after a Centre Admin changes it. There is no other channel that delivers a temporary
+password, so unlike R2 or Sentry this is **not** optional in production — `src/lib/env.ts`
+refuses to boot with `NODE_ENV=production` unless `RESEND_API_KEY` and `EMAIL_FROM` are both set,
+and `EMAIL_FROM` is well-formed.
+
+1. Create an API key (Resend → API Keys) with **Sending access** only. Set `RESEND_API_KEY`.
+2. Add and verify your sending domain (Resend → Domains): add the DKIM, SPF and (recommended)
+   DMARC records Resend generates to that domain's DNS, and wait for the status to read
+   **Verified**. Resend rejects a send from an unverified domain with a 403 — that failure is now
+   recorded as a `failed` row in `email_logs`, visible in the app's Email Analytics pages, but
+   nothing reaches the recipient.
+3. Set `EMAIL_FROM` to an address on that verified domain. Both `noreply@your-domain.com` and the
+   named form `Impetus <noreply@your-domain.com>` are accepted.
+4. Add a webhook (Resend → Webhooks) pointing at `https://<your-domain>/api/webhooks/resend`, and
+   copy its **Signing Secret** into `RESEND_WEBHOOK_SECRET`. Subscribe it to `email.sent`,
+   `email.delivered`, `email.opened`, `email.clicked`, `email.bounced`, `email.failed` and
+   `email.complained` — the seven events `src/app/api/webhooks/resend/route.ts` tracks. Without
+   this, email still sends; only the delivery status shown in Email Analytics stays at `sent`
+   forever.
+5. Leave Resend's own suppression list enabled (the default). A hard-bounced parent address will
+   otherwise keep being retried on every invite.
+
+## 4. Sentry (optional but recommended)
 
 Create a Sentry project, set `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` (the same value — DSNs
 aren't secret, the `NEXT_PUBLIC_` one just ships in the browser bundle) and, for source-map
@@ -67,7 +94,7 @@ upload during build, `SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN`. Every on
 no-op if left unset — see `src/sentry.server.config.ts`, `src/sentry.edge.config.ts`,
 `src/instrumentation-client.ts`.
 
-## 4. Vercel
+## 5. Vercel
 
 1. Import the repository, set the environment variables from steps 1–3 (Production **and**
    Preview environments — Preview deploys are how PRs get reviewed, and they need a working
@@ -81,7 +108,7 @@ no-op if left unset — see `src/sentry.server.config.ts`, `src/sentry.edge.conf
    `src/proxy.ts` (this Next.js version's renamed `middleware.ts` — see `AGENTS.md`) — it's what
    enforces the authentication redirect on every route.
 
-## 5. Post-deploy verification
+## 6. Post-deploy verification
 
 1. Hit `/api/health` — expect `{"status":"ok","checks":{"database":"ok","storage":"ok"}}` with a
    `200`. `"degraded"` (still `200`) means storage is unreachable but the app is otherwise
@@ -99,7 +126,10 @@ no-op if left unset — see `src/sentry.server.config.ts`, `src/sentry.edge.conf
    Never add that override to `seed:test-accounts` or `seed:mock-data` in production — those
    create throwaway fixture accounts/data and are local/staging-only by design.
 3. Sign in as that Super Admin, create a centre (this exercises the R2 logo upload and the first
-   Centre Admin provisioning email in one action), and confirm the invite email arrives.
+   Centre Admin provisioning email in one action), and confirm the invite email arrives. Sign in
+   as that Centre Admin with the temporary password from the email: the app must send you
+   straight to `/reset-password?required=1` and refuse every other page until you have set your
+   own password (`profiles.must_change_password`, enforced in `src/lib/auth/dal.ts`).
 4. Confirm response headers on any page include `Content-Security-Policy`,
    `Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
    and `Permissions-Policy` (`next.config.ts`'s `headers()` — these apply globally, so any page

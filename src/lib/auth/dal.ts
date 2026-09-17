@@ -21,7 +21,7 @@ export const verifySession = cache(async () => {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, role, centre_id, full_name, email, is_active")
+    .select("id, role, centre_id, full_name, email, is_active, must_change_password")
     .eq("id", userId)
     .single();
 
@@ -31,6 +31,17 @@ export const verifySession = cache(async () => {
 
   if (!profile.is_active) {
     redirect("/login?disabled=1");
+  }
+
+  // The account is holding a temporary password that was emailed to it (see
+  // provisionUser/resetUserPassword) — it stays usable for exactly one thing,
+  // replacing that password, until the flag is cleared by updatePassword.
+  //
+  // No redirect loop: /reset-password reads the session directly rather than
+  // through verifySession, precisely so it stays reachable here, and its
+  // action clears the flag before redirecting on to the role's home.
+  if (profile.must_change_password) {
+    redirect("/reset-password?required=1");
   }
 
   return profile;
