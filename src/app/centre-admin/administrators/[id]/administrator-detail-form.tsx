@@ -32,6 +32,7 @@ const ROLE_LABEL: Record<string, string> = {
 export function AdministratorDetailForm({
   profileId,
   fullName,
+  email,
   role,
   isActive,
   isSelf,
@@ -41,6 +42,7 @@ export function AdministratorDetailForm({
 }: {
   profileId: string;
   fullName: string;
+  email: string;
   role: string;
   isActive: boolean;
   isSelf: boolean;
@@ -134,13 +136,40 @@ export function AdministratorDetailForm({
               <FieldLabel htmlFor="name">Name</FieldLabel>
               <Input id="name" name="name" defaultValue={fullName} className={FILLED_INPUT} required />
             </Field>
+            {role === "coach" && (
+              <Field>
+                <FieldLabel htmlFor="email">Login Email</FieldLabel>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="off"
+                  defaultValue={email}
+                  className={FILLED_INPUT}
+                  required
+                />
+                <FieldDescription>
+                  Changing this signs the coach out everywhere and emails a password setup link to
+                  the new address.
+                </FieldDescription>
+              </Field>
+            )}
             <Field>
               <FieldLabel htmlFor="role">Role</FieldLabel>
-              {isSelf ? (
+              {isSelf || role === "coach" ? (
                 <>
-                  <Input value={ROLE_LABEL[role] ?? role} className={FILLED_INPUT} disabled />
+                  <Input
+                    id="role"
+                    value={ROLE_LABEL[role] ?? role}
+                    className={FILLED_INPUT}
+                    disabled
+                  />
                   <input type="hidden" name="role" value={role} />
-                  <FieldDescription>You can&apos;t change your own role.</FieldDescription>
+                  <FieldDescription>
+                    {isSelf
+                      ? "You can't change your own role."
+                      : "A coach's role is fixed. Their batches, attendance and 5S records all hang off this account."}
+                  </FieldDescription>
                 </>
               ) : (
                 <Select name="role" defaultValue={role} required>

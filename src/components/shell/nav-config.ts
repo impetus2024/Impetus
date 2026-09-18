@@ -96,6 +96,10 @@ export const COACH_NAV: NavGroup[] = [
       { href: "/coach/news-events", label: "News & Events", icon: Newspaper },
     ],
   },
+  {
+    label: "Account",
+    items: [{ href: "/coach/profile", label: "My Profile", icon: User }],
+  },
 ];
 
 export const MEDICAL_NAV: NavGroup[] = [

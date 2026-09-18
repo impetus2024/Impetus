@@ -7,8 +7,11 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
-import { provisionUser, generatePasswordSetupLink } from "@/lib/auth/provision-user";
-import { sendEmailChangedEmail } from "@/lib/email/send";
+import {
+  provisionUser,
+  changeLoginEmail,
+  sendLoginEmailChangedNotice,
+} from "@/lib/auth/provision-user";
 import { sendWhatsAppWelcomeTemplate } from "@/lib/whatsapp/send";
 import { normalizeContactNumber } from "@/lib/phone";
 import { encryptField } from "@/lib/crypto/field-encryption";
@@ -906,40 +909,17 @@ export async function updateParentProfile(
 
   if (existing && (emailChanging || !emailsEqual(linkedParentEmail, d.parentEmail))) {
     if (link) {
-      const { error: emailError } = await admin.auth.admin.updateUserById(link.parent_id, {
-        email: d.parentEmail,
-        email_confirm: true,
-      });
-      if (emailError) {
-        // GoTrue's admin UPDATE endpoint has no duplicate-email pre-check the
-        // way createUser does: an address that's already taken reaches
-        // auth.users' users_email_partial_key unique index and comes back as
-        // HTTP 500 carrying a Postgres 23505 body. supabase-js folds every 5xx
-        // into an AuthRetryableFetchError *without* parsing that body, so
-        // emailError.code is undefined and message is "{}" -- meaning the
-        // email_exists test alone can never match here, and every such attempt
-        // (the common case: handing a parent an email that already has an
-        // account) fell through to the generic message with the real cause
-        // logged nowhere. Ask profiles which case this was: it mirrors
-        // auth.users.email via the on_auth_user_updated trigger, and stores it
-        // lowercased the way GoTrue does.
-        logError(
-          `Failed to update the login email for parent ${link.parent_id} (${existing.parent_email} -> ${d.parentEmail}):`,
-          emailError
-        );
-
-        const { data: conflictingProfile } = await admin
-          .from("profiles")
-          .select("id")
-          .eq("email", d.parentEmail.toLowerCase())
-          .neq("id", link.parent_id)
-          .maybeSingle();
-
-        const message =
-          conflictingProfile || emailError.code === "email_exists"
-            ? EMAIL_IN_USE_MESSAGE
-            : "Failed to update the parent's login email.";
-        return { error: message };
+      // Shared with the coach email change (see changeLoginEmail): updates
+      // auth.users, maps a duplicate address to EMAIL_IN_USE_MESSAGE, and
+      // revokes the parent's existing sessions once the email has moved.
+      const emailResult = await changeLoginEmail(link.parent_id, d.parentEmail);
+      if (emailResult !== "ok") {
+        return {
+          error:
+            emailResult === "email_in_use"
+              ? EMAIL_IN_USE_MESSAGE
+              : "Failed to update the parent's login email.",
+        };
       }
 
       // The address on the account has moved at this point. Record what it
@@ -952,20 +932,6 @@ export async function updateParentProfile(
         parentId: link.parent_id,
         previousEmail: existing.parent_email ?? linkedParentEmail ?? "",
       };
-
-      // The login identity just changed under whoever is holding a session on
-      // this account. Same hardening, same caveats, as resetUserPassword and
-      // setAdministratorActive — logged rather than thrown, because the email
-      // change itself has already succeeded and matters more.
-      const { error: revokeError } = await admin.rpc("revoke_user_sessions", {
-        target_user_id: link.parent_id,
-      });
-      if (revokeError) {
-        logError(
-          `Failed to revoke existing sessions for parent ${link.parent_id} after an email change:`,
-          revokeError
-        );
-      }
 
       // Sibling sync must not silently no-op: a failed read would look like
       // "no siblings" and skip the sync entirely, and a failed write would
@@ -1065,21 +1031,12 @@ export async function updateParentProfile(
   if (emailChangeNotice) {
     const newEmail = player?.parent_email ?? d.parentEmail;
     try {
-      const passwordSetupUrl = await generatePasswordSetupLink(newEmail);
-      await sendEmailChangedEmail({
-        to: newEmail,
+      await sendLoginEmailChangedNotice({
+        userId: emailChangeNotice.parentId,
+        newEmail,
+        previousEmail: emailChangeNotice.previousEmail,
         fullName: d.fatherName || d.motherName || "Parent",
-        passwordSetupUrl,
-        loginUrl: absoluteUrl("/login"),
-        recipientProfileId: emailChangeNotice.parentId,
         centreId: centreAdmin.centre_id!,
-        // Stable across retries of the same change, distinct per change, and
-        // enforced by a unique index on email_logs — so a double-submit or a
-        // re-run after a partial failure sends one email, not two. The one
-        // case it also suppresses is changing an address away and back to a
-        // previous value, which would reuse the same key; that recipient has
-        // already had this exact notice.
-        idempotencyKey: `email_changed:${emailChangeNotice.parentId}:${emailChangeNotice.previousEmail.toLowerCase()}->${newEmail.toLowerCase()}`,
       });
     } catch (err) {
       // The change itself stands — reporting it as a failed save would be

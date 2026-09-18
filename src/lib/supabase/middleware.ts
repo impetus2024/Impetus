@@ -6,8 +6,11 @@ const PUBLIC_PATHS = ["/login", "/auth", "/forgot-password"];
 // Unlike PUBLIC_PATHS, never redirected in *either* direction (logged-in
 // users aren't bounced to their dashboard here either) — an uptime monitor
 // can't follow a redirect meaningfully, and it isn't a page a signed-in
-// user would land on by mistake.
-const ALWAYS_ALLOWED_PATHS = ["/api/health", "/api/webhooks/resend"];
+// user would land on by mistake. /auth/confirm is here too: an emailed
+// recovery/password-setup link must be verified even when the browser already
+// holds some other session, instead of being bounced to that session's
+// dashboard with the link left unused.
+const ALWAYS_ALLOWED_PATHS = ["/api/health", "/api/webhooks/resend", "/auth/confirm"];
 
 // Refreshes the Supabase session cookie on every request and applies
 // optimistic (cookie-only) redirects. Authoritative role checks still
