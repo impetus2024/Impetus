@@ -26,7 +26,6 @@ export function ResetPasswordForm({ required = false }: { required?: boolean }) 
       <div className="mt-8">
         <form action={action}>
           <FieldGroup>
-            <input type="hidden" name="required" value={required ? "1" : ""} />
             <Field>
               <FieldLabel htmlFor="password">New password</FieldLabel>
               <Input

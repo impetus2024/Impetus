@@ -2,7 +2,7 @@ import "server-only";
 import { randomBytes } from "crypto";
 import type { User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendAccountInviteEmail } from "@/lib/email/send";
+import { sendAccountInviteEmail, sendEmailChangedEmail } from "@/lib/email/send";
 import { absoluteUrl } from "@/lib/url";
 import { logError, logWarning } from "@/lib/logger";
 import type { UserRole } from "@/lib/auth/roles";
@@ -187,12 +187,7 @@ export async function resetUserPassword(params: {
   // statelessness an already-issued access token is only fully dead once
   // it naturally expires). Logged, not thrown — the password change
   // already succeeded and matters more than this secondary hardening step.
-  const { error: revokeError } = await admin.rpc("revoke_user_sessions", {
-    target_user_id: userId,
-  });
-  if (revokeError) {
-    logError(`Failed to revoke existing sessions for ${email} after password reset:`, revokeError);
-  }
+  await revokeUserSessions(userId, "an admin password reset");
 
   let emailSent = false;
   try {
@@ -211,4 +206,114 @@ export async function resetUserPassword(params: {
   }
 
   return { tempPassword, emailSent };
+}
+
+// Ends every session the user holds. Shared by each flow that changes a
+// credential or login identity (admin reset, email change, self-service and
+// recovery password changes). See the revoke_user_sessions migration for the
+// caveat: an already-issued access token only dies at its natural expiry.
+//
+// Logged, not thrown: the change it accompanies has already succeeded and
+// matters more than this hardening step.
+export async function revokeUserSessions(userId: string, reason: string): Promise<void> {
+  const { error } = await createAdminClient().rpc("revoke_user_sessions", {
+    target_user_id: userId,
+  });
+  if (error) {
+    logError(`Failed to revoke existing sessions for user ${userId} after ${reason}:`, error);
+  }
+}
+
+export type ChangeLoginEmailResult = "ok" | "email_in_use" | "failed";
+
+// Moves an account's login email in auth.users (the source of truth);
+// handle_auth_user_sync then mirrors it into profiles.email. Shared by the
+// parent (updateParentProfile) and coach (updateAdministrator) email-change
+// flows so duplicate detection and session revocation can't drift apart.
+//
+// handle_auth_user_sync rewrites role/centre_id/full_name from the auth
+// metadata on every email update, and that metadata can lag behind profiles
+// (updateAdministrator edits profiles.full_name/role directly). The current
+// profile values are therefore written back in the same call, so the email
+// change leaves role, centre and name exactly as they were.
+export async function changeLoginEmail(
+  userId: string,
+  newEmail: string
+): Promise<ChangeLoginEmailResult> {
+  const admin = createAdminClient();
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("role, centre_id, full_name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    logError(`Failed to load profile ${userId} before changing its login email:`, profileError);
+    return "failed";
+  }
+
+  const { error: emailError } = await admin.auth.admin.updateUserById(userId, {
+    email: newEmail,
+    email_confirm: true,
+    app_metadata: { role: profile.role, centre_id: profile.centre_id },
+    user_metadata: { full_name: profile.full_name },
+  });
+
+  if (emailError) {
+    // GoTrue's admin UPDATE endpoint has no duplicate-email pre-check the
+    // way createUser does: an address that's already taken reaches
+    // auth.users' users_email_partial_key unique index and comes back as
+    // HTTP 500 carrying a Postgres 23505 body. supabase-js folds every 5xx
+    // into an AuthRetryableFetchError *without* parsing that body, so
+    // emailError.code is undefined and message is "{}" -- meaning the
+    // email_exists test alone can never match here. Ask profiles which case
+    // this was: it mirrors auth.users.email via the on_auth_user_updated
+    // trigger, and stores it lowercased the way GoTrue does.
+    logError(`Failed to update the login email for user ${userId} (-> ${newEmail}):`, emailError);
+
+    const { data: conflictingProfile } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("email", newEmail.toLowerCase())
+      .neq("id", userId)
+      .maybeSingle();
+
+    return conflictingProfile || emailError.code === "email_exists" ? "email_in_use" : "failed";
+  }
+
+  // The login identity just changed under whoever is holding a session on
+  // this account.
+  await revokeUserSessions(userId, "an email change");
+  return "ok";
+}
+
+// Sent to the NEW address once every write for an email change has
+// succeeded: Supabase's single-use recovery link (generatePasswordSetupLink)
+// inside the existing email-changed template. Throws when the send fails so
+// the caller can tell the operator; the change itself stands either way.
+export async function sendLoginEmailChangedNotice(params: {
+  userId: string;
+  newEmail: string;
+  previousEmail: string;
+  fullName: string;
+  centreId: string | null;
+}): Promise<void> {
+  const { userId, newEmail, previousEmail, fullName, centreId } = params;
+  const passwordSetupUrl = await generatePasswordSetupLink(newEmail);
+  await sendEmailChangedEmail({
+    to: newEmail,
+    fullName,
+    passwordSetupUrl,
+    loginUrl: absoluteUrl("/login"),
+    recipientProfileId: userId,
+    centreId,
+    // Stable across retries of the same change, distinct per change, and
+    // enforced by a unique index on email_logs — so a double-submit or a
+    // re-run after a partial failure sends one email, not two. The one case
+    // it also suppresses is changing an address away and back to a previous
+    // value, which would reuse the same key; that recipient has already had
+    // this exact notice.
+    idempotencyKey: `email_changed:${userId}:${previousEmail.toLowerCase()}->${newEmail.toLowerCase()}`,
+  });
 }

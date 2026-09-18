@@ -69,6 +69,10 @@ export const TEST_PNG = Buffer.from(
 // than fail, the same way they skip without DEV_DEFAULT_PASSWORD.
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 export const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// The publishable/anon key: for specs that need a real end-user Data API
+// request (signing in as a seeded account) rather than service-role access,
+// so RLS + triggers are exercised the way a hand-rolled client would hit them.
+export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export function adminClient() {
   return createSupabaseClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {

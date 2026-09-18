@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySession } from "@/lib/auth/dal";
+import { revokeUserSessions } from "@/lib/auth/provision-user";
 import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
 import { logError } from "@/lib/logger";
 
@@ -95,6 +96,19 @@ export async function changeOwnPassword(
     .eq("id", profile.id);
   if (flagError) {
     logError(`Failed to clear must_change_password for ${profile.id}:`, flagError);
+  }
+
+  // End every session opened with the old password — on other devices, and
+  // the extra one the verification sign-in above just issued — then open a
+  // fresh one here with the new password so this user stays signed in.
+  await revokeUserSessions(profile.id, "a self-service password change");
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: profile.email,
+    password: parsed.data.newPassword,
+  });
+  if (signInError) {
+    // The password change stands; they'll just be asked to sign in again.
+    logError(`Could not re-establish a session for ${profile.id} after a password change:`, signInError);
   }
 
   return { success: true };
