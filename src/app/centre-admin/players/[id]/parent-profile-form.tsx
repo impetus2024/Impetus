@@ -17,7 +17,9 @@ import { SUPPORTED_COUNTRIES } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import type { PlayerFormState } from "../actions";
 
-export type ParentProfileDefaultValues = ParentProfileViewValues;
+export type ParentProfileDefaultValues = ParentProfileViewValues & {
+  updatedAt: string | null;
+};
 
 export function ParentProfileForm({
   action,
@@ -61,6 +63,7 @@ export function ParentProfileForm({
 
   return (
     <form action={formAction} className="space-y-6">
+      <input type="hidden" name="updatedAt" value={defaultValues.updatedAt ?? ""} />
       <div className="flex justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
           Cancel
