@@ -1,25 +1,55 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+function parseHostname(url: string, name: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    throw new Error(`${name} is not a valid URL: ${url}`);
+  }
+}
+
+function isLocalHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
+
 /**
  * Code-level guard for specs that create or mutate real rows (auth.spec.ts,
- * workflows.spec.ts) — smoke.spec.ts never calls this, since it's documented
- * as safe against any target. Call at module scope so it runs before any
- * test in the file, and refuses to proceed if PLAYWRIGHT_BASE_URL points at
- * a non-local target without an explicit opt-in. Docs alone (e2e/README.md)
- * aren't enough here — this makes the same rule unskippable in CI/local runs.
+ * workflows.spec.ts, coach-account.spec.ts, parent-email.spec.ts) —
+ * smoke.spec.ts never calls this, since it's documented as safe against any
+ * target. Call at module scope so it runs before any test in the file.
+ *
+ * The mutating specs write through the service-role client, which targets
+ * NEXT_PUBLIC_SUPABASE_URL — so that URL is what has to be local (or
+ * explicitly allowed), not just PLAYWRIGHT_BASE_URL. This stops a linked or
+ * production Supabase project from being hit just because the app URL happened
+ * to be localhost. When NEXT_PUBLIC_SUPABASE_URL is unset the guard no-ops:
+ * the specs' own `test.skip` handles an unconfigured environment, so a
+ * smoke-only CI run without .env.local still passes.
  */
 export function assertSafeE2ETarget(): void {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (supabaseUrl) {
+    const supabaseHost = parseHostname(supabaseUrl, "NEXT_PUBLIC_SUPABASE_URL");
+    if (!isLocalHost(supabaseHost) && process.env.ALLOW_REMOTE_E2E !== "true") {
+      throw new Error(
+        `Refusing to run mutating E2E tests against Supabase at ${supabaseUrl}: it is not a local ` +
+          `URL and ALLOW_REMOTE_E2E is not "true". These tests create and delete real rows with the ` +
+          `service-role key — never point them at a production project.`
+      );
+    }
+  }
+
   const baseURL = process.env.PLAYWRIGHT_BASE_URL;
   if (!baseURL) return; // no override — Playwright manages a local dev server itself.
 
-  let hostname: string;
-  try {
-    hostname = new URL(baseURL).hostname;
-  } catch {
-    throw new Error(`PLAYWRIGHT_BASE_URL is not a valid URL: ${baseURL}`);
-  }
-  if (hostname === "localhost" || hostname === "127.0.0.1") return;
+  const baseHost = parseHostname(baseURL, "PLAYWRIGHT_BASE_URL");
+  if (isLocalHost(baseHost)) return;
 
   if (process.env.ALLOW_REMOTE_E2E === "true") {
     console.warn(

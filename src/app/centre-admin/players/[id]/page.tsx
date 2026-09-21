@@ -249,6 +249,7 @@ export default async function PlayerDetailPage({
                   state: player.state,
                   city: player.city,
                   pincode: player.pincode,
+                  updatedAt: player.updated_at,
                 }}
               />
             )}
