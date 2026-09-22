@@ -23,8 +23,13 @@ export function FiveSPdfExportButton({ playerId }: { playerId: string }) {
       }
 
       const blob = await response.blob();
+      // Only accept a plain *.pdf basename from the header; anything else
+      // (path separators, quotes, CR/LF, or a non-pdf name) falls back to a
+      // safe default. The server already sanitizes this value, but the client
+      // should never write an unvalidated header string into link.download.
       const filename =
-        response.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ?? "5S-Report.pdf";
+        response.headers.get("Content-Disposition")?.match(/filename="([\w.-]+\.pdf)"/i)?.[1] ??
+        "5S-Report.pdf";
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
