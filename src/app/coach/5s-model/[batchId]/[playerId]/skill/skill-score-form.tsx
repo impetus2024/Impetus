@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { StarRatingInput } from "@/components/ui/star-rating";
 import { submitSkillScores, type SkillGroup, type SkillScoresFormState } from "../../../actions";
+import { AutoSaveStatus, useAutoSaveScore } from "../../../auto-save-score";
 
 type Test = { id: string; name: string; group_name: string | null; is_required: boolean };
 
@@ -49,6 +50,7 @@ export function SkillScoreForm({
 
   const action = submitSkillScores.bind(null, batchId, playerId, boundGroups);
   const [state, formAction, pending] = useActionState<SkillScoresFormState, FormData>(action, undefined);
+  const { entries, save } = useAutoSaveScore(batchId, playerId);
 
   return (
     <form action={formAction} className="space-y-8">
@@ -75,6 +77,7 @@ export function SkillScoreForm({
                         defaultValue={existingScores.get(test.id) ?? ""}
                         required={test.is_required && !locked}
                         disabled={locked}
+                        onBlur={(event) => save(test.id, event.currentTarget.value)}
                         className="max-w-md"
                       />
                       {locked && (
@@ -83,6 +86,7 @@ export function SkillScoreForm({
                         </span>
                       )}
                     </div>
+                    <AutoSaveStatus entry={entries[test.id]} />
                   </Field>
                 );
               })}

@@ -15,6 +15,14 @@ export function logError(message: string, error: unknown): void {
   Sentry.captureException(error, { extra: { message } });
 }
 
+// For expected, non-error outcomes worth a line in the server log but not a
+// Sentry alert (e.g. cleanup deliberately keeping an object that is still
+// referenced). Console only — unlike logWarning/logError this never reports
+// to Sentry, because nothing here needs anyone paged about it.
+export function logInfo(message: string): void {
+  console.info(message);
+}
+
 // For failures that are noteworthy but non-fatal to the operation (e.g. an
 // invite email didn't send) — still worth surfacing in production, one
 // severity level down from logError.

@@ -1,7 +1,7 @@
 import { HeartPulse } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getSignedFileUrl } from "@/lib/storage/r2";
-import { logError } from "@/lib/logger";
+import { resolveDocumentLink } from "@/lib/storage/resolve-document-links";
+import { DocumentLinkView } from "@/components/profile/documents-section";
 import { EmptyState } from "@/components/empty-state";
 import {
   Table,
@@ -11,16 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-async function safeSignedUrl(key: string | null) {
-  if (!key) return null;
-  try {
-    return await getSignedFileUrl(key);
-  } catch (err) {
-    logError(`Failed to sign injury report URL (${key}):`, err);
-    return null;
-  }
-}
 
 export async function InjuryReportsTable({ playerId }: { playerId: string }) {
   const supabase = await createClient();
@@ -35,7 +25,7 @@ export async function InjuryReportsTable({ playerId }: { playerId: string }) {
   const rows = await Promise.all(
     (injuries ?? []).map(async (i) => ({
       ...i,
-      reportUrl: await safeSignedUrl(i.report_doc_path),
+      report: await resolveDocumentLink(`injury report ${i.id}`, i.report_doc_path),
     }))
   );
 
@@ -60,10 +50,8 @@ export async function InjuryReportsTable({ playerId }: { playerId: string }) {
             <TableCell>{i.cause ?? "—"}</TableCell>
             <TableCell>{i.treating_person ?? "—"}</TableCell>
             <TableCell>
-              {i.reportUrl ? (
-                <a href={i.reportUrl} target="_blank" rel="noreferrer" className="text-primary underline">
-                  View
-                </a>
+              {i.report ? (
+                <DocumentLinkView link={i.report} label="View" className="text-primary underline" />
               ) : (
                 "—"
               )}

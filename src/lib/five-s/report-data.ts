@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
-import { computeFiveSScores, getStaminaBenchmarkContext, type FiveSScores } from "@/lib/five-s/scores";
+import { computeFiveSScores, getStaminaBenchmarkContext, getSpeedBenchmarkContext, getStrengthBenchmarkContext, type FiveSScores } from "@/lib/five-s/scores";
 import { calculateAge } from "@/lib/age";
 import { FIVE_S_RADAR_AXES } from "@/components/profile/five-s-radar-section";
 import { FIVE_S_CATEGORY_META } from "@/lib/five-s/categories";
@@ -35,8 +35,9 @@ export type FiveSTestSection = {
   category: string;
   categoryLabel: string;
   overallRemarks: string | null;
-  // Coach-entered overall 1-5 rating (see computeFiveSScores) — only ever
-  // set for skill today; null for every other category.
+  // The category's 1-5 score, exactly as plotted on the radar: benchmark-
+  // derived for speed/stamina/strength, the coach-entered half-star rating
+  // for skill. Null when nothing has been recorded for this category yet.
   rating: number | null;
   groups: FiveSTestGroup[];
 };
@@ -55,8 +56,9 @@ export type FiveSQuestionGroup = {
 export type FiveSQuestionSection = {
   category: string;
   categoryLabel: string;
-  // Coach-entered overall 1-5 rating (see computeFiveSScores) — only ever
-  // set for spirit today; null for every other question-based category.
+  // The category's 1-5 score, exactly as plotted on the radar — for
+  // question-based categories (spirit) that is the coach-entered half-star
+  // rating. Null when nothing has been recorded for this category yet.
   rating: number | null;
   groups: FiveSQuestionGroup[];
 };
@@ -121,6 +123,8 @@ export async function getFiveSReportData(playerId: string): Promise<FiveSReportD
     getFiveSTests(),
     supabase
       .from("five_s_results")
+      // level/shuttle/vo2_max are retained for legacy Beep Test / Cooper Test historical results.
+      // New Stamina tests (Yo-Yo, RSA) store null for these fields.
       .select("test_id, score, level, shuttle, vo2_max, remarks, recorded_at, previous_score")
       .eq("player_id", playerId),
     supabase.from("five_s_category_notes").select("category, remarks, rating").eq("player_id", playerId),
@@ -154,7 +158,13 @@ export async function getFiveSReportData(playerId: string): Promise<FiveSReportD
   const questionCategories = [...new Set(questions.map((q) => q.category))];
 
   const staminaTestIds = tests.filter((t) => t.category === "stamina").map((t) => t.id);
-  const staminaContext = await getStaminaBenchmarkContext(supabase, playerId, staminaTestIds);
+  const speedTestIds = tests.filter((t) => t.category === "speed").map((t) => t.id);
+  const strengthTestIds = tests.filter((t) => t.category === "strength").map((t) => t.id);
+  const [staminaContext, speedContext, strengthContext] = await Promise.all([
+    getStaminaBenchmarkContext(supabase, playerId, staminaTestIds),
+    getSpeedBenchmarkContext(supabase, playerId, speedTestIds),
+    getStrengthBenchmarkContext(supabase, playerId, strengthTestIds),
+  ]);
 
   const radar = computeFiveSScores(
     FIVE_S_RADAR_AXES.map((a) => a.key),
@@ -163,8 +173,20 @@ export async function getFiveSReportData(playerId: string): Promise<FiveSReportD
     resultByTest,
     responseByQuestion,
     staminaContext,
-    ratingByCategory
+    ratingByCategory,
+    speedContext,
+    strengthContext
   );
+
+  // The badge next to a category heading must show the same 1-5 the radar
+  // plots for that category: benchmark-derived for speed/stamina/strength,
+  // the coach's half-star rating for skill/spirit. Reading
+  // five_s_category_notes.rating directly only ever produced a value for the
+  // latter two, so every benchmark-based category rendered without a rating
+  // despite having a computed score. `assessed` gates it, so a category with
+  // nothing recorded shows no badge rather than 0.
+  const categoryRating = (category: string): number | null =>
+    radar.assessed[category] ? (radar.current[category] ?? null) : null;
 
   const testSections: FiveSTestSection[] = categories.map((category) => {
     const categoryTests = tests.filter((t) => t.category === category);
@@ -172,7 +194,7 @@ export async function getFiveSReportData(playerId: string): Promise<FiveSReportD
       category,
       categoryLabel: categoryLabel(category),
       overallRemarks: noteByCategory.get(category) ?? null,
-      rating: ratingByCategory.get(category) ?? null,
+      rating: categoryRating(category),
       groups: groupTests(categoryTests).map((group) => ({
         label: group.label,
         remarks: group.label ? (groupNoteByKey.get(`${category}::${group.label}`) ?? null) : null,
@@ -191,7 +213,7 @@ export async function getFiveSReportData(playerId: string): Promise<FiveSReportD
     return {
       category,
       categoryLabel: categoryLabel(category),
-      rating: ratingByCategory.get(category) ?? null,
+      rating: categoryRating(category),
       groups: groupQuestions(categoryQuestions).map((section) => ({
         label: section.label,
         questions: section.questions.map((question) => ({

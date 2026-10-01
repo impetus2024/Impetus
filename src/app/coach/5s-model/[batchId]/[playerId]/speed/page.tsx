@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
 import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
+import { calculateAge } from "@/lib/age";
 import { getFiveSTests } from "@/lib/five-s/catalog";
+import { findSpeedAgeBand } from "@/lib/five-s/speed-benchmarks";
+import { speedTestDistanceGuidance } from "@/lib/five-s/speed-test-guidance";
 import { SpeedScoreForm } from "./speed-score-form";
 
 export default async function Coach5sModelSpeedPage({
@@ -31,7 +34,7 @@ export default async function Coach5sModelSpeedPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name, player_batches!inner(batch_id)")
+    .select("id, name, date_of_birth, gender, player_batches!inner(batch_id)")
     .eq("id", playerId)
     .eq("player_batches.batch_id", batchId)
     .maybeSingle();
@@ -45,14 +48,37 @@ export default async function Coach5sModelSpeedPage({
     .single();
   const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
 
-  const [allTests, { data: results }] = await Promise.all([
+  const [allTests, { data: results }, { data: speedAgeBands }] = await Promise.all([
     getFiveSTests(),
     supabase
       .from("five_s_results")
       .select("test_id, score, recorded_by")
       .eq("player_id", playerId),
+    supabase
+      .from("five_s_age_bands")
+      .select("id, label, min_age, max_age, gender")
+      .eq("category", "speed")
+      .order("display_order"),
   ]);
   const tests = allTests.filter((t) => t.category === "speed");
+
+  // Two Speed tests are run over a different course length depending on the
+  // age group, so the coach has to see which distance applies to this player
+  // before recording a time. The band comes from the same gender-aware
+  // lookup scoring uses (findSpeedAgeBand) rather than a second age rule
+  // here; speedTestDistanceGuidance then returns null for the tests that
+  // don't vary by age, so those fields render exactly as before.
+  const speedBand = findSpeedAgeBand(
+    calculateAge(player.date_of_birth),
+    player.gender,
+    speedAgeBands ?? []
+  );
+  const distanceGuidance = new Map(
+    tests.flatMap((t) => {
+      const guidance = speedTestDistanceGuidance(t.name, speedBand?.label ?? null);
+      return guidance ? [[t.id, guidance] as const] : [];
+    })
+  );
 
   const existingScores = new Map(
     (results ?? []).flatMap((r) => (r.score != null ? [[r.test_id, r.score] as const] : []))
@@ -91,6 +117,7 @@ export default async function Coach5sModelSpeedPage({
               tests={tests}
               existingScores={existingScores}
               lockedTestIds={lockedTestIds}
+              distanceGuidance={distanceGuidance}
             />
           </CardContent>
         </Card>

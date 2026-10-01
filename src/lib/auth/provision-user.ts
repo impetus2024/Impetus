@@ -226,6 +226,20 @@ export async function revokeUserSessions(userId: string, reason: string): Promis
 
 export type ChangeLoginEmailResult = "ok" | "email_in_use" | "failed";
 
+// Whether another account already holds this login email. profiles mirrors
+// auth.users.email (lowercased by GoTrue), so it answers without an auth call.
+// Read-only: callers use it to reject a duplicate before any write, and
+// changeLoginEmail uses it to classify a failed update.
+export async function loginEmailInUse(email: string, exceptUserId: string): Promise<boolean> {
+  const { data } = await createAdminClient()
+    .from("profiles")
+    .select("id")
+    .eq("email", email.toLowerCase())
+    .neq("id", exceptUserId)
+    .maybeSingle();
+  return data != null;
+}
+
 // Moves an account's login email in auth.users (the source of truth);
 // handle_auth_user_sync then mirrors it into profiles.email. Shared by the
 // parent (updateParentProfile) and coach (updateAdministrator) email-change
@@ -272,14 +286,9 @@ export async function changeLoginEmail(
     // trigger, and stores it lowercased the way GoTrue does.
     logError(`Failed to update the login email for user ${userId} (-> ${newEmail}):`, emailError);
 
-    const { data: conflictingProfile } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("email", newEmail.toLowerCase())
-      .neq("id", userId)
-      .maybeSingle();
-
-    return conflictingProfile || emailError.code === "email_exists" ? "email_in_use" : "failed";
+    return (await loginEmailInUse(newEmail, userId)) || emailError.code === "email_exists"
+      ? "email_in_use"
+      : "failed";
   }
 
   // The login identity just changed under whoever is holding a session on

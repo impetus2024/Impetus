@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getFiveSTests } from "@/lib/five-s/catalog";
+import { groupSpeedBenchmarks } from "@/lib/five-s/speed-benchmarks";
 import { EmptyState } from "@/components/empty-state";
 import {
   Table,
@@ -20,7 +21,7 @@ export default async function SuperAdminSpeedBenchmarksPage() {
   const testIds = tests.map((t) => t.id);
 
   const supabase = await createClient();
-  const [{ data: ageBands }, { data: benchmarks }] = await Promise.all([
+  const [{ data: ageBands }, { data: benchmarkRows }] = await Promise.all([
     supabase
       .from("five_s_age_bands")
       .select("id, label")
@@ -29,24 +30,20 @@ export default async function SuperAdminSpeedBenchmarksPage() {
     testIds.length > 0
       ? supabase
           .from("five_s_test_benchmarks")
-          .select("test_id, age_band_id, min_value, max_value, avg_value")
+          .select("test_id, age_band_id, score_5_ceiling, score_4_ceiling, score_3_ceiling, score_2_ceiling")
           .in("test_id", testIds)
-      : Promise.resolve({ data: [] as { test_id: string; age_band_id: string; min_value: number; max_value: number; avg_value: number }[] }),
+      : Promise.resolve({ data: [] }),
   ]);
 
   const bands = ageBands ?? [];
-  const benchmarksByTest = new Map<string, Map<string, { min: number; max: number; avg: number }>>();
-  for (const b of benchmarks ?? []) {
-    if (!benchmarksByTest.has(b.test_id)) benchmarksByTest.set(b.test_id, new Map());
-    benchmarksByTest.get(b.test_id)!.set(b.age_band_id, { min: b.min_value, max: b.max_value, avg: b.avg_value });
-  }
+  const benchmarksByTest = groupSpeedBenchmarks(benchmarkRows ?? []);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Speed Benchmarks</h1>
         <p className="text-sm text-muted-foreground">
-          Set the Min/Max/Avg score each age group needs to hit on every Speed test.
+          Set the five performance bands (Score 5–1) each age group needs to hit on every Speed test.
         </p>
       </div>
       <Table>

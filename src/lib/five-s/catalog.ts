@@ -23,7 +23,11 @@ type FiveSQuestion = Database["public"]["Tables"]["five_s_questions"]["Row"];
 export const getFiveSTests = unstable_cache(
   async (): Promise<FiveSTest[]> => {
     const admin = createAdminClient();
-    const { data } = await admin.from("five_s_tests").select("*").order("display_order");
+    const { data } = await admin
+      .from("five_s_tests")
+      .select("*")
+      .eq("is_active", true)
+      .order("display_order");
     return data ?? [];
   },
   ["five-s-tests-catalog"],

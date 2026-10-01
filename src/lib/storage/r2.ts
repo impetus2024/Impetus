@@ -28,9 +28,14 @@ import { MAX_UPLOAD_BYTES } from "./upload-constraints";
 type Visibility = "public" | "private";
 
 function getClient() {
+  // R2_ENDPOINT / R2_REGION exist only so the e2e suite can point this client
+  // at local S3-compatible storage (Supabase's S3 protocol). They are unset in
+  // every deployed environment, where the R2 account endpoint below is used.
+  const endpointOverride = process.env.R2_ENDPOINT;
   return new S3Client({
-    region: "auto",
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    region: process.env.R2_REGION ?? "auto",
+    endpoint: endpointOverride ?? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    forcePathStyle: Boolean(endpointOverride),
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,

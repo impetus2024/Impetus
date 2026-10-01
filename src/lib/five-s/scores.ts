@@ -2,7 +2,9 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { calculateAge } from "@/lib/age";
 import { getFiveSTests, getFiveSQuestions } from "./catalog";
-import { computeStaminaCategoryScore, groupStaminaBenchmarks, type TestBenchmark } from "./stamina-benchmarks";
+import { computeStaminaCategoryScore, groupStaminaBenchmarks, type StaminaBenchmark } from "./stamina-benchmarks";
+import { computeSpeedCategoryScore, groupSpeedBenchmarks, type SpeedBenchmark } from "./speed-benchmarks";
+import { computeStrengthCategoryScore, groupStrengthBenchmarks, type StrengthBenchmark } from "./strength-benchmarks";
 
 type TestLike = { id: string; category: string; is_required: boolean; unit: string };
 type QuestionLike = { id: string; category: string };
@@ -29,8 +31,23 @@ export type FiveSScores = {
 
 export type StaminaBenchmarkContext = {
   playerAge: number;
-  ageBands: { id: string; min_age: number; max_age: number | null }[];
-  benchmarksByTest: Map<string, Map<string, TestBenchmark>>;
+  playerGender: string | null;
+  ageBands: { id: string; min_age: number; max_age: number | null; gender: string | null }[];
+  benchmarksByTest: Map<string, Map<string, StaminaBenchmark>>;
+};
+
+export type SpeedBenchmarkContext = {
+  playerAge: number;
+  playerGender: string | null;
+  ageBands: { id: string; min_age: number; max_age: number | null; gender: string | null }[];
+  benchmarksByTest: Map<string, Map<string, SpeedBenchmark>>;
+};
+
+export type StrengthBenchmarkContext = {
+  playerAge: number;
+  playerGender: string | null;
+  ageBands: { id: string; min_age: number; max_age: number | null; gender: string | null }[];
+  benchmarksByTest: Map<string, Map<string, StrengthBenchmark>>;
 };
 
 // Fetches everything computeFiveSScores needs to score Stamina against
@@ -45,16 +62,16 @@ export async function getStaminaBenchmarkContext(
   staminaTestIds: string[]
 ): Promise<StaminaBenchmarkContext | null> {
   const [{ data: player }, { data: ageBands }, { data: benchmarkRows }] = await Promise.all([
-    supabase.from("players").select("date_of_birth").eq("id", playerId).maybeSingle(),
+    supabase.from("players").select("date_of_birth, gender").eq("id", playerId).maybeSingle(),
     supabase
       .from("five_s_age_bands")
-      .select("id, min_age, max_age")
+      .select("id, min_age, max_age, gender")
       .eq("category", "stamina")
       .order("display_order"),
     staminaTestIds.length > 0
       ? supabase
           .from("five_s_stamina_benchmarks")
-          .select("test_id, age_band_id, tier, value, level, shuttle")
+          .select("test_id, age_band_id, higher_is_better, score_5_boundary, score_4_boundary, score_3_boundary, score_2_boundary")
           .in("test_id", staminaTestIds)
       : Promise.resolve({ data: [] }),
   ]);
@@ -63,8 +80,79 @@ export async function getStaminaBenchmarkContext(
 
   return {
     playerAge: calculateAge(player.date_of_birth),
+    playerGender: player.gender ?? null,
     ageBands: ageBands ?? [],
     benchmarksByTest: groupStaminaBenchmarks(benchmarkRows ?? []),
+  };
+}
+
+// Fetches everything computeFiveSScores needs to score Speed against its
+// 5-band benchmarks: the player's age and gender (from date_of_birth /
+// gender, not the centre-customizable age_categories — "U-17 Girls" needs
+// gender), the fixed 'speed' age bands, and whatever super_admin has
+// configured for the given tests. Mirrors getStaminaBenchmarkContext.
+export async function getSpeedBenchmarkContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playerId: string,
+  speedTestIds: string[]
+): Promise<SpeedBenchmarkContext | null> {
+  const [{ data: player }, { data: ageBands }, { data: benchmarkRows }] = await Promise.all([
+    supabase.from("players").select("date_of_birth, gender").eq("id", playerId).maybeSingle(),
+    supabase
+      .from("five_s_age_bands")
+      .select("id, min_age, max_age, gender")
+      .eq("category", "speed")
+      .order("display_order"),
+    speedTestIds.length > 0
+      ? supabase
+          .from("five_s_test_benchmarks")
+          .select("test_id, age_band_id, score_5_ceiling, score_4_ceiling, score_3_ceiling, score_2_ceiling")
+          .in("test_id", speedTestIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  if (!player) return null;
+
+  return {
+    playerAge: calculateAge(player.date_of_birth),
+    playerGender: player.gender ?? null,
+    ageBands: ageBands ?? [],
+    benchmarksByTest: groupSpeedBenchmarks(benchmarkRows ?? []),
+  };
+}
+
+// Fetches everything computeFiveSScores needs to score Strength against its
+// 5-band benchmarks: the player's age and gender (from date_of_birth /
+// gender, not the centre-customizable age_categories — "U-17 Girls" needs
+// gender), the fixed 'strength' age bands, and whatever super_admin has
+// configured for the given tests. Mirrors getStaminaBenchmarkContext.
+export async function getStrengthBenchmarkContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  playerId: string,
+  strengthTestIds: string[]
+): Promise<StrengthBenchmarkContext | null> {
+  const [{ data: player }, { data: ageBands }, { data: benchmarkRows }] = await Promise.all([
+    supabase.from("players").select("date_of_birth, gender").eq("id", playerId).maybeSingle(),
+    supabase
+      .from("five_s_age_bands")
+      .select("id, min_age, max_age, gender")
+      .eq("category", "strength")
+      .order("display_order"),
+    strengthTestIds.length > 0
+      ? supabase
+          .from("five_s_strength_benchmarks")
+          .select("test_id, age_band_id, higher_is_better, score_5_boundary, score_4_boundary, score_3_boundary, score_2_boundary")
+          .in("test_id", strengthTestIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  if (!player) return null;
+
+  return {
+    playerAge: calculateAge(player.date_of_birth),
+    playerGender: player.gender ?? null,
+    ageBands: ageBands ?? [],
+    benchmarksByTest: groupStrengthBenchmarks(benchmarkRows ?? []),
   };
 }
 
@@ -75,10 +163,14 @@ export async function getStaminaBenchmarkContext(
 // player with a single assessment can skip rendering a "Previous" series.
 //
 // Stamina is the exception: when staminaContext is supplied, its score
-// comes from computeStaminaCategoryScore (Poor/Average/Elite benchmarks per
-// age) instead of completion %. There's no benchmark-based "previous" yet —
+// comes from computeStaminaCategoryScore (Kickstart 1-5 performance bands
+// per age) instead of completion %. There's no benchmark-based "previous" yet —
 // stamina simply doesn't appear in `previous`/hasPrevious, same as a
 // category with no data at all.
+//
+// Strength is also an exception: when strengthContext is supplied, its score
+// comes from computeStrengthCategoryScore (Kickstart 1-5 performance bands
+// per age) instead of completion %. No benchmark-based "previous" for strength.
 //
 // Skill and Spirit are also exceptions: their per-test/per-question entry
 // only ever tracked completion (was something filled in), never the actual
@@ -97,7 +189,9 @@ export function computeFiveSScores(
   resultByTest: Map<string, ResultLike>,
   responseByQuestion: Map<string, unknown>,
   staminaContext?: StaminaBenchmarkContext | null,
-  ratingByCategory: Map<string, number> = new Map()
+  ratingByCategory: Map<string, number> = new Map(),
+  speedContext?: SpeedBenchmarkContext | null,
+  strengthContext?: StrengthBenchmarkContext | null
 ): FiveSScores {
   const current: Record<string, number> = {};
   const previous: Record<string, number> = {};
@@ -109,10 +203,45 @@ export function computeFiveSScores(
       const staminaTests = tests.filter((t) => t.category === "stamina");
       const score = computeStaminaCategoryScore(
         staminaContext.playerAge,
+        staminaContext.playerGender,
         staminaTests,
         resultByTest,
         staminaContext.ageBands,
         staminaContext.benchmarksByTest
+      );
+      if (score != null) {
+        current[key] = score;
+        assessed[key] = true;
+      }
+      continue;
+    }
+
+    if (key === "speed" && speedContext) {
+      const speedTests = tests.filter((t) => t.category === "speed");
+      const score = computeSpeedCategoryScore(
+        speedContext.playerAge,
+        speedContext.playerGender,
+        speedTests,
+        resultByTest,
+        speedContext.ageBands,
+        speedContext.benchmarksByTest
+      );
+      if (score != null) {
+        current[key] = score;
+        assessed[key] = true;
+      }
+      continue;
+    }
+
+    if (key === "strength" && strengthContext) {
+      const strengthTests = tests.filter((t) => t.category === "strength");
+      const score = computeStrengthCategoryScore(
+        strengthContext.playerAge,
+        strengthContext.playerGender,
+        strengthTests,
+        resultByTest,
+        strengthContext.ageBands,
+        strengthContext.benchmarksByTest
       );
       if (score != null) {
         current[key] = score;
@@ -207,6 +336,8 @@ export async function getFiveSCurrentScores(
   const [tests, questions, { data: results }, { data: responses }, { data: categoryNotes }] = await Promise.all([
     getFiveSTests(),
     getFiveSQuestions(),
+    // level/shuttle are retained for legacy Beep Test / Cooper Test historical results.
+    // New Stamina tests (Yo-Yo, RSA) store null for these fields.
     supabase.from("five_s_results").select("test_id, previous_score, score, level, shuttle").eq("player_id", playerId),
     supabase.from("five_s_question_responses").select("question_id, answer").eq("player_id", playerId),
     supabase.from("five_s_category_notes").select("category, rating").eq("player_id", playerId),
@@ -219,10 +350,25 @@ export async function getFiveSCurrentScores(
   );
 
   const staminaTestIds = tests.filter((t) => t.category === "stamina").map((t) => t.id);
-  const staminaContext = await getStaminaBenchmarkContext(supabase, playerId, staminaTestIds);
+  const speedTestIds = tests.filter((t) => t.category === "speed").map((t) => t.id);
+  const strengthTestIds = tests.filter((t) => t.category === "strength").map((t) => t.id);
+  const [staminaContext, speedContext, strengthContext] = await Promise.all([
+    getStaminaBenchmarkContext(supabase, playerId, staminaTestIds),
+    getSpeedBenchmarkContext(supabase, playerId, speedTestIds),
+    getStrengthBenchmarkContext(supabase, playerId, strengthTestIds),
+  ]);
 
-  return computeFiveSScores(axisKeys, tests, questions, resultByTest, responseByQuestion, staminaContext, ratingByCategory)
-    .current;
+  return computeFiveSScores(
+    axisKeys,
+    tests,
+    questions,
+    resultByTest,
+    responseByQuestion,
+    staminaContext,
+    ratingByCategory,
+    speedContext,
+    strengthContext
+  ).current;
 }
 
 function groupByPlayer<T extends { player_id: string }>(rows: T[]): Map<string, T[]> {
@@ -256,18 +402,22 @@ export async function getOverallPlayerRatings(
 
   const supabase = await createClient();
 
-  const [tests, questions, { data: players }, { data: results }, { data: responses }, { data: categoryNotes }, { data: ageBands }] =
+  const [tests, questions, { data: players }, { data: results }, { data: responses }, { data: categoryNotes }, { data: ageBands }, { data: speedAgeBands }, { data: strengthAgeBands }] =
     await Promise.all([
       getFiveSTests(),
       getFiveSQuestions(),
-      supabase.from("players").select("id, date_of_birth").in("id", playerIds),
+      supabase.from("players").select("id, date_of_birth, gender").in("id", playerIds),
       supabase
         .from("five_s_results")
+        // level/shuttle are retained for legacy Beep Test / Cooper Test historical results.
+        // New Stamina tests (Yo-Yo, RSA) store null for these fields.
         .select("player_id, test_id, previous_score, score, level, shuttle")
         .in("player_id", playerIds),
       supabase.from("five_s_question_responses").select("player_id, question_id, answer").in("player_id", playerIds),
       supabase.from("five_s_category_notes").select("player_id, category, rating").in("player_id", playerIds),
-      supabase.from("five_s_age_bands").select("id, min_age, max_age").eq("category", "stamina").order("display_order"),
+      supabase.from("five_s_age_bands").select("id, min_age, max_age, gender").eq("category", "stamina").order("display_order"),
+      supabase.from("five_s_age_bands").select("id, min_age, max_age, gender").eq("category", "speed").order("display_order"),
+      supabase.from("five_s_age_bands").select("id, min_age, max_age, gender").eq("category", "strength").order("display_order"),
     ]);
 
   const staminaTestIds = tests.filter((t) => t.category === "stamina").map((t) => t.id);
@@ -275,15 +425,36 @@ export async function getOverallPlayerRatings(
     staminaTestIds.length > 0
       ? await supabase
           .from("five_s_stamina_benchmarks")
-          .select("test_id, age_band_id, tier, value, level, shuttle")
+          .select("test_id, age_band_id, higher_is_better, score_5_boundary, score_4_boundary, score_3_boundary, score_2_boundary")
           .in("test_id", staminaTestIds)
       : { data: [] };
   const benchmarksByTest = groupStaminaBenchmarks(benchmarkRows ?? []);
+
+  const speedTestIds = tests.filter((t) => t.category === "speed").map((t) => t.id);
+  const { data: speedBenchmarkRows } =
+    speedTestIds.length > 0
+      ? await supabase
+          .from("five_s_test_benchmarks")
+          .select("test_id, age_band_id, score_5_ceiling, score_4_ceiling, score_3_ceiling, score_2_ceiling")
+          .in("test_id", speedTestIds)
+      : { data: [] };
+  const speedBenchmarksByTest = groupSpeedBenchmarks(speedBenchmarkRows ?? []);
+
+  const strengthTestIds = tests.filter((t) => t.category === "strength").map((t) => t.id);
+  const { data: strengthBenchmarkRows } =
+    strengthTestIds.length > 0
+      ? await supabase
+          .from("five_s_strength_benchmarks")
+          .select("test_id, age_band_id, higher_is_better, score_5_boundary, score_4_boundary, score_3_boundary, score_2_boundary")
+          .in("test_id", strengthTestIds)
+      : { data: [] };
+  const strengthBenchmarksByTest = groupStrengthBenchmarks(strengthBenchmarkRows ?? []);
 
   const resultsByPlayer = groupByPlayer(results ?? []);
   const responsesByPlayer = groupByPlayer(responses ?? []);
   const categoryNotesByPlayer = groupByPlayer(categoryNotes ?? []);
   const ageByPlayer = new Map((players ?? []).map((p) => [p.id, p.date_of_birth ? calculateAge(p.date_of_birth) : null]));
+  const genderByPlayer = new Map((players ?? []).map((p) => [p.id, p.gender ?? null]));
 
   for (const playerId of playerIds) {
     const resultByTest = new Map((resultsByPlayer.get(playerId) ?? []).map((r) => [r.test_id, r]));
@@ -292,7 +463,17 @@ export async function getOverallPlayerRatings(
       (categoryNotesByPlayer.get(playerId) ?? []).flatMap((n) => (n.rating != null ? [[n.category, n.rating] as const] : []))
     );
     const playerAge = ageByPlayer.get(playerId);
-    const staminaContext = playerAge != null ? { playerAge, ageBands: ageBands ?? [], benchmarksByTest } : null;
+    const playerGender = genderByPlayer.get(playerId) ?? null;
+    const staminaContext =
+      playerAge != null ? { playerAge, playerGender, ageBands: ageBands ?? [], benchmarksByTest } : null;
+    const speedContext =
+      playerAge != null
+        ? { playerAge, playerGender, ageBands: speedAgeBands ?? [], benchmarksByTest: speedBenchmarksByTest }
+        : null;
+    const strengthContext =
+      playerAge != null
+        ? { playerAge, playerGender, ageBands: strengthAgeBands ?? [], benchmarksByTest: strengthBenchmarksByTest }
+        : null;
 
     const scores = computeFiveSScores(
       axisKeys,
@@ -301,7 +482,9 @@ export async function getOverallPlayerRatings(
       resultByTest,
       responseByQuestion,
       staminaContext,
-      ratingByCategory
+      ratingByCategory,
+      speedContext,
+      strengthContext
     );
     ratings.set(playerId, computeOverallPlayerRating(scores));
   }

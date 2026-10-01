@@ -504,6 +504,82 @@ test.describe("parent login email safety", () => {
     expect(await playerParentEmail(divPlayerId)).toBe(divParentNewEmail);
   });
 
+  // Stale-form race: an admin opens the parent editor (showing the current
+  // email), somebody else then moves the login and the copies to a newer
+  // address, and the admin saves. The submitted email now differs from the
+  // database, which is exactly what used to be read as "change the login back"
+  // -- updateParentProfile moved auth.users/profiles/siblings BEFORE its
+  // updated_at check rejected the save. Everything must stay on the newer
+  // address, and the parent's session must survive.
+  async function staleParentSave(
+    page: Page,
+    browser: Browser,
+    newerEmail: string,
+    unrelatedEdit: { city: string } | null
+  ) {
+    const displayedEmail = await playerParentEmail(playerId);
+    const cityBefore = (await admin().from("players").select("city").eq("id", playerId).single()).data?.city;
+    const noticesBefore = await emailChangedLogsFor(parentId);
+
+    await signInAsCentreAdmin(page);
+    await openParentEditor(page, playerId);
+    await expect(page.getByLabel("Parent / Guardian Email ID")).toHaveValue(displayedEmail);
+
+    // The competing update lands after the form loaded: login, mirrored
+    // profile and this centre's copies all move (bumping players.updated_at).
+    const { error: moveError } = await admin().auth.admin.updateUserById(parentId, {
+      email: newerEmail,
+      email_confirm: true,
+    });
+    expect(moveError).toBeNull();
+    await expect.poll(async () => (await profileOf(parentId)).email).toBe(newerEmail);
+    await admin().from("players").update({ parent_email: newerEmail }).in("id", [playerId, siblingId]);
+
+    const parentSession = await parentPage(browser, newerEmail, parentPassword);
+
+    if (unrelatedEdit) await page.getByLabel("City").fill(unrelatedEdit.city);
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText(/changed by someone else/i)).toBeVisible();
+
+    // Nothing from the stale request took effect anywhere.
+    expect(await authEmailOf(parentId)).toBe(newerEmail);
+    expect((await profileOf(parentId)).email).toBe(newerEmail);
+    expect(await playerParentEmail(playerId)).toBe(newerEmail);
+    expect(await playerParentEmail(siblingId)).toBe(newerEmail);
+    expect((await admin().from("players").select("city").eq("id", playerId).single()).data?.city).toBe(cityBefore);
+    expect(await emailChangedLogsFor(parentId)).toEqual(noticesBefore);
+    expect(await sessionStillValid(parentSession)).toBe(true);
+    await parentSession.context().close();
+  }
+
+  const raceEmailOne = `parent-race1-${stamp}@impetus.local`;
+  const raceEmailTwo = `parent-race2-${stamp}@impetus.local`;
+  const parentFinalEmail = `parent-final-${stamp}@impetus.local`;
+
+  test("a stale parent form cannot revert a newer email", async ({ page, browser }) => {
+    await staleParentSave(page, browser, raceEmailOne, null);
+  });
+
+  test("a stale parent form with an unrelated edit is rejected whole", async ({ page, browser }) => {
+    await staleParentSave(page, browser, raceEmailTwo, { city: "Stale City" });
+  });
+
+  test("a fresh email change still works after stale rejections", async ({ page, browser }) => {
+    const parentSession = await parentPage(browser, raceEmailTwo, parentPassword);
+
+    await signInAsCentreAdmin(page);
+    await openParentEditor(page, playerId);
+    await page.getByLabel("Parent / Guardian Email ID").fill(parentFinalEmail);
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect.poll(async () => (await profileOf(parentId)).email).toBe(parentFinalEmail);
+    expect(await authEmailOf(parentId)).toBe(parentFinalEmail);
+    expect(await playerParentEmail(playerId)).toBe(parentFinalEmail);
+    expect(await playerParentEmail(siblingId)).toBe(parentFinalEmail);
+    expect(await sessionStillValid(parentSession)).toBe(false);
+    await parentSession.context().close();
+  });
+
   test("case-insensitive parent link resolution reuses the existing account", async ({ page }) => {
     await signInAsCentreAdmin(page);
     await openParentEditor(page, casePlayerId);

@@ -28,6 +28,8 @@ import { Stepper } from "@/components/ui/stepper";
 import { selectLabel, cn } from "@/lib/utils";
 import { SUPPORTED_COUNTRIES } from "@/lib/phone";
 import type { PlayerFormState } from "./actions";
+import { DocumentLinkView } from "@/components/profile/documents-section";
+import type { DocumentLinks } from "@/lib/storage/document-link";
 
 type Option = { id: string; name: string };
 
@@ -85,7 +87,7 @@ export function PlayerForm({
   batches: Option[];
   defaultValues?: PlayerDefaultValues;
   parentEmailEditable?: boolean;
-  documentLinks?: Record<string, string>;
+  documentLinks?: DocumentLinks;
   submitLabel?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
@@ -302,9 +304,7 @@ export function PlayerForm({
                 <FileInput id="aadhaarDoc" name="aadhaarDoc" />
                 {documentLinks?.aadhaar && (
                   <FieldDescription>
-                    <a href={documentLinks.aadhaar} target="_blank" rel="noreferrer" className="underline">
-                      View current file
-                    </a>
+                    <DocumentLinkView link={documentLinks.aadhaar} label="View current file" />
                   </FieldDescription>
                 )}
               </Field>
@@ -313,9 +313,7 @@ export function PlayerForm({
                 <FileInput id="medicalRecords" name="medicalRecords" />
                 {documentLinks?.medicalRecords && (
                   <FieldDescription>
-                    <a href={documentLinks.medicalRecords} target="_blank" rel="noreferrer" className="underline">
-                      View current file
-                    </a>
+                    <DocumentLinkView link={documentLinks.medicalRecords} label="View current file" />
                   </FieldDescription>
                 )}
               </Field>
@@ -324,9 +322,7 @@ export function PlayerForm({
                 <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
                 {documentLinks?.profilePicture && (
                   <FieldDescription>
-                    <a href={documentLinks.profilePicture} target="_blank" rel="noreferrer" className="underline">
-                      View current file
-                    </a>
+                    <DocumentLinkView link={documentLinks.profilePicture} label="View current file" />
                   </FieldDescription>
                 )}
               </Field>

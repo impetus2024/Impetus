@@ -9,6 +9,13 @@ import { uploadFile, deleteFile, UploadValidationError } from "@/lib/storage/r2"
 import { provisionUser, ProvisionUserError } from "@/lib/auth/provision-user";
 import { absoluteUrl } from "@/lib/url";
 import { logError } from "@/lib/logger";
+import {
+  collectDocumentReferences,
+  deleteWithDocumentCleanup,
+  releaseDocuments,
+  type ReleaseContext,
+} from "@/lib/storage/document-lifecycle";
+import type { DocumentReference } from "@/lib/storage/document-registry";
 import type { Database } from "@/lib/supabase/database.types";
 
 const CentreSchema = z.object({
@@ -289,12 +296,18 @@ async function findStaffWithHistoricalRecords(
 // admin. auth.admin.deleteUser is a GoTrue REST call, not a SQL statement, so
 // it can't be wrapped in a Postgres transaction with the rest of this
 // function — prevention up front is the only real safeguard available here.
+//
+// Private documents (staff documents, and the players' and injuries' that
+// cascade with the centre) are captured before anything is deleted and only
+// removed from storage afterwards, for the rows whose deletion definitely
+// succeeded, and only where no other row still references the key — see
+// src/lib/storage/document-lifecycle.ts.
 export async function deleteCentre(
   centreId: string,
   _prev: CentreFormState,
   formData: FormData
 ): Promise<CentreFormState> {
-  await requireRole("super_admin");
+  const superAdmin = await requireRole("super_admin");
 
   const parsed = DeleteCentreSchema.safeParse({
     confirmName: formData.get("confirmName"),
@@ -340,11 +353,41 @@ export async function deleteCentre(
     };
   }
 
+  let staffDocs: DocumentReference[];
+  let cascadedDocs: DocumentReference[];
+  try {
+    staffDocs = await collectDocumentReferences(
+      admin,
+      "staff_profiles",
+      "profile_id",
+      (staff ?? []).map((s) => s.id)
+    );
+    cascadedDocs = [
+      ...(await collectDocumentReferences(admin, "players", "centre_id", [centreId])),
+      ...(await collectDocumentReferences(admin, "injuries", "centre_id", [centreId])),
+    ];
+  } catch (err) {
+    logError(`Failed to read documents before deleting centre ${centreId}:`, err);
+    return { error: "Failed to delete centre — nothing was deleted." };
+  }
+
+  const releaseContext: ReleaseContext = { actorId: superAdmin.id, centreId, reason: "centre_deleted" };
+  const deletedStaffIds = new Set<string>();
+  const releaseDeletedStaffDocs = () =>
+    releaseDocuments(
+      admin,
+      staffDocs.filter((ref) => deletedStaffIds.has(ref.entityId)),
+      releaseContext
+    );
+
   const deletedSoFar: string[] = [];
   for (const member of staff ?? []) {
     const { error } = await admin.auth.admin.deleteUser(member.id);
     if (error) {
       logError(`Failed to delete staff account ${member.id} for centre ${centreId}:`, error);
+      // This member's outcome is unknown, so its documents are kept; those of
+      // the members already deleted are released.
+      await releaseDeletedStaffDocs();
       // Should be unreachable now that findStaffWithHistoricalRecords has
       // already ruled out every known blocker above — if it still happens
       // (a genuine transient GoTrue failure, or a new row created in the
@@ -359,14 +402,20 @@ export async function deleteCentre(
       };
     }
     deletedSoFar.push(member.full_name);
+    deletedStaffIds.add(member.id);
   }
 
   const { error } = await admin.from("centres").delete().eq("id", centreId);
 
   if (error) {
     logError(`Failed to delete centre ${centreId}:`, error);
+    // The centre (and its players/injuries) still exists; only the staff
+    // accounts deleted above have released their documents.
+    await releaseDeletedStaffDocs();
     return { error: "Failed to delete centre." };
   }
+
+  await releaseDocuments(admin, [...staffDocs, ...cascadedDocs], releaseContext);
 
   if (centre.logo_path) {
     deleteFile(centre.logo_path).catch((err) =>
@@ -383,12 +432,14 @@ export type DeleteAdminState = { error?: string } | undefined;
 // Hard-deletes the auth account, same as deleteCentre's staff cleanup above
 // (profiles/staff_profiles cascade from auth.users on delete) — scoped to
 // role = 'centre_admin' and this specific centreId so the action can't be
-// pointed at a coach/medical profile or another centre's admin.
+// pointed at a coach/medical profile or another centre's admin. The
+// account's staff documents are removed from storage only once the delete
+// has succeeded (see src/lib/storage/document-lifecycle.ts).
 export async function deleteCentreAdmin(
   centreId: string,
   adminId: string
 ): Promise<DeleteAdminState> {
-  await requireRole("super_admin");
+  const superAdmin = await requireRole("super_admin");
 
   const admin = createAdminClient();
 
@@ -404,10 +455,15 @@ export async function deleteCentreAdmin(
     return { error: "Administrator not found." };
   }
 
-  const { error } = await admin.auth.admin.deleteUser(adminId);
+  const result = await deleteWithDocumentCleanup(
+    admin,
+    () => collectDocumentReferences(admin, "staff_profiles", "profile_id", [adminId]),
+    () => admin.auth.admin.deleteUser(adminId),
+    { actorId: superAdmin.id, centreId, reason: "centre_admin_deleted" }
+  );
 
-  if (error) {
-    logError(`Failed to delete centre admin ${adminId} for centre ${centreId}:`, error);
+  if (!result.deleted) {
+    logError(`Failed to delete centre admin ${adminId} for centre ${centreId}:`, result.error);
     return { error: "Failed to remove administrator." };
   }
 

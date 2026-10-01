@@ -244,6 +244,54 @@ export type Database = {
         }
         Relationships: []
       }
+      document_audit_events: {
+        Row: {
+          action: Database["public"]["Enums"]["document_audit_action"]
+          actor_id: string | null
+          centre_id: string | null
+          created_at: string
+          document_field: string | null
+          entity_id: string | null
+          entity_type:
+            | Database["public"]["Enums"]["document_entity_type"]
+            | null
+          id: string
+          new_key: string | null
+          old_key: string | null
+          reason: string | null
+        }
+        Insert: {
+          action: Database["public"]["Enums"]["document_audit_action"]
+          actor_id?: string | null
+          centre_id?: string | null
+          created_at?: string
+          document_field?: string | null
+          entity_id?: string | null
+          entity_type?:
+            | Database["public"]["Enums"]["document_entity_type"]
+            | null
+          id?: string
+          new_key?: string | null
+          old_key?: string | null
+          reason?: string | null
+        }
+        Update: {
+          action?: Database["public"]["Enums"]["document_audit_action"]
+          actor_id?: string | null
+          centre_id?: string | null
+          created_at?: string
+          document_field?: string | null
+          entity_id?: string | null
+          entity_type?:
+            | Database["public"]["Enums"]["document_entity_type"]
+            | null
+          id?: string
+          new_key?: string | null
+          old_key?: string | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
       email_logs: {
         Row: {
           bounced_at: string | null
@@ -351,6 +399,7 @@ export type Database = {
           category: Database["public"]["Enums"]["five_s_category"]
           created_at: string
           display_order: number
+          gender: string | null
           id: string
           label: string
           max_age: number | null
@@ -360,6 +409,7 @@ export type Database = {
           category: Database["public"]["Enums"]["five_s_category"]
           created_at?: string
           display_order?: number
+          gender?: string | null
           id?: string
           label: string
           max_age?: number | null
@@ -369,6 +419,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["five_s_category"]
           created_at?: string
           display_order?: number
+          gender?: string | null
           id?: string
           label?: string
           max_age?: number | null
@@ -710,33 +761,36 @@ export type Database = {
       five_s_stamina_benchmarks: {
         Row: {
           age_band_id: string
+          higher_is_better: boolean
           id: string
-          level: number | null
-          shuttle: number | null
+          score_2_boundary: number
+          score_3_boundary: number
+          score_4_boundary: number
+          score_5_boundary: number
           test_id: string
-          tier: Database["public"]["Enums"]["five_s_benchmark_tier"]
           updated_at: string
-          value: number | null
         }
         Insert: {
           age_band_id: string
+          higher_is_better: boolean
           id?: string
-          level?: number | null
-          shuttle?: number | null
+          score_2_boundary: number
+          score_3_boundary: number
+          score_4_boundary: number
+          score_5_boundary: number
           test_id: string
-          tier: Database["public"]["Enums"]["five_s_benchmark_tier"]
           updated_at?: string
-          value?: number | null
         }
         Update: {
           age_band_id?: string
+          higher_is_better?: boolean
           id?: string
-          level?: number | null
-          shuttle?: number | null
+          score_2_boundary?: number
+          score_3_boundary?: number
+          score_4_boundary?: number
+          score_5_boundary?: number
           test_id?: string
-          tier?: Database["public"]["Enums"]["five_s_benchmark_tier"]
           updated_at?: string
-          value?: number | null
         }
         Relationships: [
           {
@@ -755,31 +809,85 @@ export type Database = {
           },
         ]
       }
-      five_s_test_benchmarks: {
+      five_s_strength_benchmarks: {
         Row: {
           age_band_id: string
-          avg_value: number
+          higher_is_better: boolean
           id: string
-          max_value: number
-          min_value: number
+          score_2_boundary: number
+          score_3_boundary: number
+          score_4_boundary: number
+          score_5_boundary: number | null
           test_id: string
           updated_at: string
         }
         Insert: {
           age_band_id: string
-          avg_value: number
+          higher_is_better: boolean
           id?: string
-          max_value: number
-          min_value: number
+          score_2_boundary: number
+          score_3_boundary: number
+          score_4_boundary: number
+          score_5_boundary?: number | null
           test_id: string
           updated_at?: string
         }
         Update: {
           age_band_id?: string
-          avg_value?: number
+          higher_is_better?: boolean
           id?: string
-          max_value?: number
-          min_value?: number
+          score_2_boundary?: number
+          score_3_boundary?: number
+          score_4_boundary?: number
+          score_5_boundary?: number | null
+          test_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "five_s_strength_benchmarks_age_band_id_fkey"
+            columns: ["age_band_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_age_bands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "five_s_strength_benchmarks_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "five_s_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      five_s_test_benchmarks: {
+        Row: {
+          age_band_id: string
+          id: string
+          score_2_ceiling: number
+          score_3_ceiling: number
+          score_4_ceiling: number
+          score_5_ceiling: number
+          test_id: string
+          updated_at: string
+        }
+        Insert: {
+          age_band_id: string
+          id?: string
+          score_2_ceiling: number
+          score_3_ceiling: number
+          score_4_ceiling: number
+          score_5_ceiling: number
+          test_id: string
+          updated_at?: string
+        }
+        Update: {
+          age_band_id?: string
+          id?: string
+          score_2_ceiling?: number
+          score_3_ceiling?: number
+          score_4_ceiling?: number
+          score_5_ceiling?: number
           test_id?: string
           updated_at?: string
         }
@@ -807,6 +915,7 @@ export type Database = {
           display_order: number
           group_name: string | null
           id: string
+          is_active: boolean
           is_required: boolean
           name: string
           unit: string
@@ -817,6 +926,7 @@ export type Database = {
           display_order?: number
           group_name?: string | null
           id?: string
+          is_active?: boolean
           is_required?: boolean
           name: string
           unit: string
@@ -827,6 +937,7 @@ export type Database = {
           display_order?: number
           group_name?: string | null
           id?: string
+          is_active?: boolean
           is_required?: boolean
           name?: string
           unit?: string
@@ -1893,6 +2004,14 @@ export type Database = {
     }
     Enums: {
       attendance_status: "present" | "absent"
+      document_audit_action:
+        | "upload"
+        | "replace"
+        | "delete"
+        | "cleanup"
+        | "orphan"
+        | "missing"
+      document_entity_type: "player" | "staff_profile" | "injury"
       email_status:
         | "sent"
         | "delivered"
@@ -1902,11 +2021,6 @@ export type Database = {
         | "failed"
         | "complained"
       five_s_answer_scale: "rarely" | "sometimes" | "frequently" | "always"
-      five_s_benchmark_tier:
-        | "poor_ceiling"
-        | "average_low"
-        | "average_high"
-        | "elite_floor"
       five_s_category: "speed" | "stamina" | "strength" | "spirit" | "skill"
       gate_pass_action: "check_in" | "check_out"
       news_event_type: "upcoming_event" | "news_announcement"
@@ -2050,6 +2164,15 @@ export const Constants = {
   public: {
     Enums: {
       attendance_status: ["present", "absent"],
+      document_audit_action: [
+        "upload",
+        "replace",
+        "delete",
+        "cleanup",
+        "orphan",
+        "missing",
+      ],
+      document_entity_type: ["player", "staff_profile", "injury"],
       email_status: [
         "sent",
         "delivered",
@@ -2060,12 +2183,6 @@ export const Constants = {
         "complained",
       ],
       five_s_answer_scale: ["rarely", "sometimes", "frequently", "always"],
-      five_s_benchmark_tier: [
-        "poor_ceiling",
-        "average_low",
-        "average_high",
-        "elite_floor",
-      ],
       five_s_category: ["speed", "stamina", "strength", "spirit", "skill"],
       gate_pass_action: ["check_in", "check_out"],
       news_event_type: ["upcoming_event", "news_announcement"],

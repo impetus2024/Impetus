@@ -46,17 +46,17 @@ export default async function Coach5sModelPlayerHubPage({
   const [
     testRows,
     questionRows,
-    { count: resultCount },
-    { count: responseCount },
+    { data: resultRows },
+    { data: responseRows },
     { data: report },
     { data: centre },
   ] = await Promise.all([
     getFiveSTests(),
     getFiveSQuestions(),
-    supabase.from("five_s_results").select("id", { count: "exact", head: true }).eq("player_id", playerId),
+    supabase.from("five_s_results").select("test_id").eq("player_id", playerId),
     supabase
       .from("five_s_question_responses")
-      .select("id", { count: "exact", head: true })
+      .select("question_id")
       .eq("player_id", playerId),
     supabase.from("five_s_reports").select("id").eq("player_id", playerId).maybeSingle(),
     supabase
@@ -69,9 +69,27 @@ export default async function Coach5sModelPlayerHubPage({
     ...testRows.map((t) => t.category as Category),
     ...questionRows.map((q) => q.category as Category),
   ]);
-  const hasScores = (resultCount ?? 0) > 0 || (responseCount ?? 0) > 0;
-  const isComplete =
-    (resultCount ?? 0) >= testRows.length && (responseCount ?? 0) >= questionRows.length;
+
+  // Which categories already hold something, so the button can say "Add
+  // Score" before anything is recorded and "Update Score" after. Rows are
+  // written per field as the coach types (see autoSaveTestScore), so this is
+  // accurate even for a category that was started but not submitted.
+  const categoryByTestId = new Map(testRows.map((t) => [t.id, t.category as Category]));
+  const categoryByQuestionId = new Map(questionRows.map((q) => [q.id, q.category as Category]));
+  const recordedCategories = new Set<Category>();
+  for (const row of resultRows ?? []) {
+    const category = categoryByTestId.get(row.test_id);
+    if (category) recordedCategories.add(category);
+  }
+  for (const row of responseRows ?? []) {
+    const category = categoryByQuestionId.get(row.question_id);
+    if (category) recordedCategories.add(category);
+  }
+
+  const resultCount = (resultRows ?? []).length;
+  const responseCount = (responseRows ?? []).length;
+  const hasScores = resultCount > 0 || responseCount > 0;
+  const isComplete = resultCount >= testRows.length && responseCount >= questionRows.length;
   const isPublished = report !== null;
   const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
   const isWindowOpen = windowStatus.status === "open";
@@ -129,7 +147,11 @@ export default async function Coach5sModelPlayerHubPage({
                   {isAvailable && isWindowOpen ? (
                     <Button
                       className="w-full"
-                      render={<Link href={`/coach/5s-model/${batchId}/${playerId}/${category}`}>Update Score</Link>}
+                      render={
+                        <Link href={`/coach/5s-model/${batchId}/${playerId}/${category}`}>
+                          {recordedCategories.has(category) ? "Update Score" : "Add Score"}
+                        </Link>
+                      }
                     />
                   ) : (
                     <Button className="w-full" disabled variant="outline">

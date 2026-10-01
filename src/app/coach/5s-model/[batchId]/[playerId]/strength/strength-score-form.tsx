@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldGroup, FieldDescription } from "@/components/ui/field";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { submitStrengthScores, type StrengthScoresFormState } from "../../../actions";
+import { AutoSaveStatus, useAutoSaveScore } from "../../../auto-save-score";
 
 type Test = { id: string; name: string; unit: string; group_name: string | null };
 
@@ -17,15 +18,18 @@ export function StrengthScoreForm({
   tests,
   existingScores,
   lockedTestIds,
+  guidance,
 }: {
   batchId: string;
   playerId: string;
   tests: Test[];
   existingScores: Map<string, number>;
   lockedTestIds: Set<string>;
+  guidance: Map<string, string>;
 }) {
   const action = submitStrengthScores.bind(null, batchId, playerId);
   const [state, formAction, pending] = useActionState<StrengthScoresFormState, FormData>(action, undefined);
+  const { entries, save } = useAutoSaveScore(batchId, playerId);
   const allLocked = tests.length > 0 && tests.every((t) => lockedTestIds.has(t.id));
 
   const groups: { label: string; tests: Test[] }[] = [];
@@ -47,11 +51,13 @@ export function StrengthScoreForm({
           <FieldGroup>
             {group.tests.map((test) => {
               const locked = lockedTestIds.has(test.id);
+              const guide = guidance.get(test.id);
               return (
                 <Field key={test.id}>
                   <FieldLabel htmlFor={`score_${test.id}`}>
                     {!locked && <span className="text-destructive">*</span>} {test.name} :
                   </FieldLabel>
+                  {guide && <FieldDescription>{guide}</FieldDescription>}
                   <div className="flex items-center gap-3">
                     <Input
                       id={`score_${test.id}`}
@@ -63,6 +69,7 @@ export function StrengthScoreForm({
                       defaultValue={existingScores.get(test.id) ?? ""}
                       required={!locked}
                       disabled={locked}
+                      onBlur={(event) => save(test.id, event.currentTarget.value)}
                       className="max-w-md"
                     />
                     {locked ? (
@@ -79,14 +86,15 @@ export function StrengthScoreForm({
                               </span>
                             }
                           />
-                          <TooltipContent>Compared against European standard benchmarks for this age group.</TooltipContent>
+                          <TooltipContent>Compared against Kickstart performance bands for this age group.</TooltipContent>
                         </Tooltip>
                         <span className="text-sm font-medium whitespace-nowrap text-muted-foreground">
-                          European Standard Scores
+                          Kickstart Performance Bands
                         </span>
                       </>
                     )}
                   </div>
+                  <AutoSaveStatus entry={entries[test.id]} />
                 </Field>
               );
             })}

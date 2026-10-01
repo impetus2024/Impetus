@@ -243,8 +243,12 @@ function RadarSvg({ scores }: { scores: Record<string, number> }) {
 
 function formatResultValue(test: FiveSTestRow) {
   if (!test.result) return "Not recorded yet";
-  if (test.unit === "level") return `Level ${test.result.level} / Shuttle ${test.result.shuttle}`;
-  return `${test.result.score} ${test.unit}`.trim();
+  // level/shuttle rendering retained for legacy Beep Test historical results.
+  // New Stamina tests (Yo-Yo, RSA) store null for these fields.
+  if (test.result.level != null && test.result.shuttle != null) {
+    return `Level ${test.result.level} / Shuttle ${test.result.shuttle}`;
+  }
+  return `${test.result.score ?? ""} ${test.unit}`.trim();
 }
 
 function TestSectionCard({ section, accent }: { section: FiveSTestSection; accent: string }) {

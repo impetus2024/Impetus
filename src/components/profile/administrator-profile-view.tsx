@@ -1,5 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ViewField } from "@/components/view-field";
+import { DocumentLinkView } from "@/components/profile/documents-section";
+import { documentUrl, type DocumentLinks } from "@/lib/storage/document-link";
 
 export type AdministratorProfileViewValues = {
   name: string;
@@ -34,13 +36,15 @@ export function AdministratorProfileView({
   documentLinks,
 }: {
   values: AdministratorProfileViewValues;
-  documentLinks?: Record<string, string>;
+  documentLinks?: DocumentLinks;
 }) {
+  const avatarUrl = documentUrl(documentLinks?.profilePicture);
+
   return (
     <div className="space-y-6">
       <Avatar className="size-20 ring-4 ring-primary/15">
-        {documentLinks?.profilePicture && (
-          <AvatarImage src={documentLinks.profilePicture} alt={values.name} />
+        {avatarUrl && (
+          <AvatarImage src={avatarUrl} alt={values.name} />
         )}
         <AvatarFallback className="bg-primary/10 text-xl font-semibold text-primary">
           {initials(values.name)}
@@ -64,9 +68,7 @@ export function AdministratorProfileView({
             label={label}
             value={
               documentLinks?.[key] && (
-                <a href={documentLinks[key]} target="_blank" rel="noreferrer" className="text-primary underline">
-                  View file
-                </a>
+                <DocumentLinkView link={documentLinks[key]} label="View file" className="text-primary underline" />
               )
             }
           />

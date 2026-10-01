@@ -476,6 +476,61 @@ test.describe("coach account management", () => {
     await coachSession.context().close();
   });
 
+  // Stale-form race for the coach editor: the form is loaded showing the
+  // current login email, then a newer email lands, then the stale form saves.
+  // The stale request must be rejected before any auth write, so the newer
+  // email, the name and the sessions all stay as they were.
+  test("a stale coach form cannot revert a newer login email", async ({ page, browser }) => {
+    const raceEmail = `coach-race-${stamp}@impetus.local`;
+    const nameBefore = (await coachProfile()).full_name;
+    const noticesBefore = await admin()
+      .from("email_logs")
+      .select("recipient_email")
+      .eq("email_type", "email_changed")
+      .eq("recipient_profile_id", coachId);
+
+    await signInAsCentreAdmin(page);
+    await page.goto(`/centre-admin/administrators/${coachId}`);
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByLabel("Login Email")).toHaveValue(changedEmail);
+
+    try {
+      // The competing change, made after the form loaded.
+      const { error: moveError } = await admin().auth.admin.updateUserById(coachId, {
+        email: raceEmail,
+        email_confirm: true,
+      });
+      expect(moveError).toBeNull();
+      await expect.poll(async () => (await coachProfile()).email).toBe(raceEmail);
+
+      const coachSession = await newCoachPage(browser, raceEmail, coachPassword);
+
+      // Stale submit: email field still holds the address the form loaded
+      // with, plus an unrelated edit.
+      await page.getByLabel("Name").fill("Stale Name");
+      await page.getByRole("button", { name: "Save Changes" }).click();
+      await expect(page.getByText(/changed by someone else/i)).toBeVisible();
+
+      const profile = await coachProfile();
+      expect(profile.email).toBe(raceEmail);
+      expect(profile.full_name).toBe(nameBefore);
+      const { data: authUser } = await admin().auth.admin.getUserById(coachId);
+      expect(authUser.user?.email).toBe(raceEmail);
+      const { data: noticesAfter } = await admin()
+        .from("email_logs")
+        .select("recipient_email")
+        .eq("email_type", "email_changed")
+        .eq("recipient_profile_id", coachId);
+      expect(noticesAfter).toEqual(noticesBefore.data);
+      expect(await sessionStillValid(coachSession)).toBe(true);
+      await coachSession.context().close();
+    } finally {
+      // Later tests expect the coach on changedEmail.
+      await admin().auth.admin.updateUserById(coachId, { email: changedEmail, email_confirm: true });
+      await expect.poll(async () => (await coachProfile()).email).toBe(changedEmail);
+    }
+  });
+
   test("the setup link works in a fresh browser and the new email signs in", async ({ browser }) => {
     const link = await recoveryLinkFor(changedEmail);
     const context = await browser.newContext();

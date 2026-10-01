@@ -5,23 +5,20 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/logger";
 import {
-  STAMINA_BENCHMARK_TIERS,
-  comparePoints,
-  type BenchmarkPoint,
-  type StaminaBenchmarkTier,
+  STAMINA_BENCHMARK_BOUNDARIES,
 } from "@/lib/five-s/stamina-benchmarks";
 
 export type BenchmarkFormState = { error?: string } | undefined;
 
 const PATH = "/super-admin/5s-model/stamina";
 
-// One test's Poor/Average/Elite thresholds across every age band are
+// One test's five Score 5..1 band boundaries across every age band are
 // submitted as a single form/dialog, so this saves all of them (or none)
-// in one round trip. isBeepTest picks which field names to read per cell —
-// Level+Shuttle for Beep Test, a plain value for Cooper Test.
+// in one round trip. higherIsBetter decides the label direction and the
+// monotonicity check (Yo-Yo floors decrease, RSA ceilings increase).
 export async function saveStaminaBenchmarks(
   testId: string,
-  isBeepTest: boolean,
+  higherIsBetter: boolean,
   ageBandIds: string[],
   _prev: BenchmarkFormState,
   formData: FormData
@@ -31,45 +28,46 @@ export async function saveStaminaBenchmarks(
   const rows: {
     test_id: string;
     age_band_id: string;
-    tier: StaminaBenchmarkTier;
-    value: number | null;
-    level: number | null;
-    shuttle: number | null;
+    higher_is_better: boolean;
+    score_5_boundary: number;
+    score_4_boundary: number;
+    score_3_boundary: number;
+    score_2_boundary: number;
   }[] = [];
 
   for (const ageBandId of ageBandIds) {
-    const points: BenchmarkPoint[] = [];
+    const values = STAMINA_BENCHMARK_BOUNDARIES.map((boundary) => Number(formData.get(`${ageBandId}_${boundary}`)));
+    if (!values.every((n) => Number.isFinite(n) && n >= 0)) {
+      return { error: "Every Score 5–2 boundary is required and must be 0 or greater." };
+    }
+    const [score_5_boundary, score_4_boundary, score_3_boundary, score_2_boundary] = values;
 
-    for (const tier of STAMINA_BENCHMARK_TIERS) {
-      if (isBeepTest) {
-        const level = Number(formData.get(`${ageBandId}_${tier}_level`));
-        const shuttle = Number(formData.get(`${ageBandId}_${tier}_shuttle`));
-        if (!Number.isInteger(level) || level < 0 || !Number.isInteger(shuttle) || shuttle < 0) {
-          return { error: "Every Level/Shuttle value is required and must be 0 or greater." };
-        }
-        rows.push({ test_id: testId, age_band_id: ageBandId, tier, value: null, level, shuttle });
-        points.push({ value: null, level, shuttle });
-      } else {
-        const value = Number(formData.get(`${ageBandId}_${tier}_value`));
-        if (!Number.isFinite(value) || value < 0) {
-          return { error: "Every value is required and must be 0 or greater." };
-        }
-        rows.push({ test_id: testId, age_band_id: ageBandId, tier, value, level: null, shuttle: null });
-        points.push({ value, level: null, shuttle: null });
-      }
+    const monotonic = higherIsBetter
+      ? score_5_boundary > score_4_boundary && score_4_boundary > score_3_boundary && score_3_boundary > score_2_boundary
+      : score_5_boundary < score_4_boundary && score_4_boundary < score_3_boundary && score_3_boundary < score_2_boundary;
+    if (!monotonic) {
+      return {
+        error: higherIsBetter
+          ? "Boundaries must decrease: Score 5 > Score 4 > Score 3 > Score 2."
+          : "Boundaries must increase: Score 5 < Score 4 < Score 3 < Score 2.",
+      };
     }
 
-    for (let i = 1; i < points.length; i++) {
-      if (comparePoints(points[i], points[i - 1]) < 0) {
-        return { error: "For every age, Poor ≤ Average-low ≤ Average-high ≤ Elite must hold." };
-      }
-    }
+    rows.push({
+      test_id: testId,
+      age_band_id: ageBandId,
+      higher_is_better: higherIsBetter,
+      score_5_boundary,
+      score_4_boundary,
+      score_3_boundary,
+      score_2_boundary,
+    });
   }
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("five_s_stamina_benchmarks")
-    .upsert(rows, { onConflict: "test_id,age_band_id,tier" });
+    .upsert(rows, { onConflict: "test_id,age_band_id" });
 
   if (error) {
     logError(`Failed to save stamina benchmarks for test ${testId}:`, error);

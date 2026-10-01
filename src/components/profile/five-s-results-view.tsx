@@ -85,9 +85,11 @@ export async function FiveSResultsView({
                       <div className="flex min-h-9 items-center justify-between rounded-lg bg-muted/60 px-3 py-1.5 text-sm">
                         <span className={test.result ? "text-foreground" : "text-muted-foreground"}>
                           {test.result
-                            ? test.unit === "level"
+                            // level/shuttle rendering retained for legacy Beep Test historical results.
+                            // New Stamina tests (Yo-Yo, RSA) store null for these fields.
+                            ? test.result.level != null && test.result.shuttle != null
                               ? `Level ${test.result.level} / Shuttle ${test.result.shuttle}`
-                              : `${test.result.score} ${test.unit}`.trim()
+                              : `${test.result.score ?? ""} ${test.unit}`.trim()
                             : "Not recorded yet"}
                         </span>
                         {test.result && (

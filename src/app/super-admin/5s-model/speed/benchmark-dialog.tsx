@@ -20,10 +20,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  SPEED_BENCHMARK_CEILINGS,
+  type SpeedBenchmark,
+  type SpeedBenchmarkCeiling,
+} from "@/lib/five-s/speed-benchmarks";
 import { saveSpeedBenchmarks, type BenchmarkFormState } from "./actions";
 
+const CEILING_LABEL: Record<SpeedBenchmarkCeiling, string> = {
+  score_5_ceiling: "Score 5 (≤)",
+  score_4_ceiling: "Score 4 (≤)",
+  score_3_ceiling: "Score 3 (≤)",
+  score_2_ceiling: "Score 2 (≤)",
+};
+
 type AgeBand = { id: string; label: string };
-type BenchmarkValues = { min: number; max: number; avg: number };
 
 export function SpeedBenchmarkDialog({
   testId,
@@ -36,7 +47,7 @@ export function SpeedBenchmarkDialog({
   testName: string;
   unit: string;
   ageBands: AgeBand[];
-  existingBenchmarks: Map<string, BenchmarkValues>;
+  existingBenchmarks: Map<string, SpeedBenchmark>;
 }) {
   const action = saveSpeedBenchmarks.bind(
     null,
@@ -57,9 +68,11 @@ export function SpeedBenchmarkDialog({
             <TableHeader>
               <TableRow>
                 <TableHead>Age</TableHead>
-                <TableHead>Min ({unit})</TableHead>
-                <TableHead>Max ({unit})</TableHead>
-                <TableHead>Avg ({unit})</TableHead>
+                {SPEED_BENCHMARK_CEILINGS.map((ceiling) => (
+                  <TableHead key={ceiling}>
+                    {CEILING_LABEL[ceiling]} ({unit})
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -67,40 +80,20 @@ export function SpeedBenchmarkDialog({
                 const existing = existingBenchmarks.get(band.id);
                 return (
                   <TableRow key={band.id}>
-                    <TableCell className="font-medium">{band.label}</TableCell>
-                    <TableCell>
-                      <Input
-                        name={`min_${band.id}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        defaultValue={existing?.min ?? ""}
-                        required
-                        className="w-24"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        name={`max_${band.id}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        defaultValue={existing?.max ?? ""}
-                        required
-                        className="w-24"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        name={`avg_${band.id}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        defaultValue={existing?.avg ?? ""}
-                        required
-                        className="w-24"
-                      />
-                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{band.label}</TableCell>
+                    {SPEED_BENCHMARK_CEILINGS.map((ceiling) => (
+                      <TableCell key={ceiling}>
+                        <Input
+                          name={`${band.id}_${ceiling}`}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={existing?.[ceiling] ?? ""}
+                          required
+                          className="w-24"
+                        />
+                      </TableCell>
+                    ))}
                   </TableRow>
                 );
               })}

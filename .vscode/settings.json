@@ -93,5 +93,6 @@
                 "nvidia-nim/NVIDIA NIM/zyphra/zamba2-7b-instruct"
             ]
         }
-    }
+    },
+    "codeQL.githubDatabase.download": "never"
 }

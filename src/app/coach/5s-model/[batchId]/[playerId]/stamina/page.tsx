@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
 import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
+import { calculateAge } from "@/lib/age";
 import { getFiveSTests } from "@/lib/five-s/catalog";
+import { findStaminaAgeBand } from "@/lib/five-s/stamina-benchmarks";
+import { staminaTestGuidance } from "@/lib/five-s/stamina-test-guidance";
 import { StaminaScoreForm } from "./stamina-score-form";
 
 export default async function Coach5sModelStaminaPage({
@@ -31,7 +34,7 @@ export default async function Coach5sModelStaminaPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name, player_batches!inner(batch_id)")
+    .select("id, name, date_of_birth, gender, player_batches!inner(batch_id)")
     .eq("id", playerId)
     .eq("player_batches.batch_id", batchId)
     .maybeSingle();
@@ -45,7 +48,7 @@ export default async function Coach5sModelStaminaPage({
     .single();
   const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
 
-  const [allTests, { data: results }, { data: note }] = await Promise.all([
+  const [allTests, { data: results }, { data: note }, { data: staminaAgeBands }] = await Promise.all([
     getFiveSTests(),
     supabase
       .from("five_s_results")
@@ -57,8 +60,30 @@ export default async function Coach5sModelStaminaPage({
       .eq("player_id", playerId)
       .eq("category", "stamina")
       .maybeSingle(),
+    supabase
+      .from("five_s_age_bands")
+      .select("id, label, min_age, max_age, gender")
+      .eq("category", "stamina")
+      .order("display_order"),
   ]);
   const tests = allTests.filter((t) => t.category === "stamina");
+
+  // Both Stamina tests change protocol by age group (Yo-Yo 17 m vs 20 m,
+  // RSA 6 × 20 m vs 6 × 30 m), so the coach has to see which protocol applies
+  // to this player before recording a score. The band comes from the same
+  // gender-aware lookup scoring uses (findStaminaAgeBand) rather than a
+  // second age rule here.
+  const staminaBand = findStaminaAgeBand(
+    calculateAge(player.date_of_birth),
+    player.gender,
+    staminaAgeBands ?? []
+  );
+  const guidance = new Map(
+    tests.flatMap((t) => {
+      const g = staminaTestGuidance(t.name, staminaBand?.label ?? null);
+      return g ? [[t.id, g] as const] : [];
+    })
+  );
 
   const existingByTest = new Map((results ?? []).map((r) => [r.test_id, r]));
   const lockedTestIds = new Set(
@@ -93,6 +118,7 @@ export default async function Coach5sModelStaminaPage({
               existingByTest={existingByTest}
               overallRemarks={note?.remarks ?? ""}
               lockedTestIds={lockedTestIds}
+              guidance={guidance}
             />
           </CardContent>
         </Card>

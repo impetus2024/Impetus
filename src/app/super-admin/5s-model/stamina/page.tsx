@@ -2,7 +2,7 @@ import { Sparkles } from "lucide-react";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getFiveSTests } from "@/lib/five-s/catalog";
-import { STAMINA_BENCHMARK_TIERS, groupStaminaBenchmarks } from "@/lib/five-s/stamina-benchmarks";
+import { groupStaminaBenchmarks } from "@/lib/five-s/stamina-benchmarks";
 import { EmptyState } from "@/components/empty-state";
 import {
   Table,
@@ -30,7 +30,7 @@ export default async function SuperAdminStaminaBenchmarksPage() {
     testIds.length > 0
       ? supabase
           .from("five_s_stamina_benchmarks")
-          .select("test_id, age_band_id, tier, value, level, shuttle")
+          .select("test_id, age_band_id, higher_is_better, score_5_boundary, score_4_boundary, score_3_boundary, score_2_boundary")
           .in("test_id", testIds)
       : Promise.resolve({ data: [] }),
   ]);
@@ -38,14 +38,27 @@ export default async function SuperAdminStaminaBenchmarksPage() {
   const bands = ageBands ?? [];
   const benchmarksByTest = groupStaminaBenchmarks(benchmarkRows ?? []);
 
+  // Each Stamina test has a single direction across all age bands.
+  // Extract it from the first benchmark row for the test.
+  const higherIsBetterByTest = new Map<string, boolean>();
+  for (const test of tests) {
+    const testBenchmarks = benchmarksByTest.get(test.id);
+    if (testBenchmarks && testBenchmarks.size > 0) {
+      const firstBenchmark = testBenchmarks.values().next().value;
+      if (firstBenchmark) {
+        higherIsBetterByTest.set(test.id, firstBenchmark.higher_is_better);
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Stamina Benchmarks</h1>
         <p className="text-sm text-muted-foreground">
-          Set the Poor / Average / Elite thresholds each age needs to hit on every Stamina test.
-          Beep Test uses Level/Shuttle pairs; Cooper Test uses distance. VO2 Max is auto-calculated
-          from these when a coach records a score — never entered manually.
+          Set the five Kickstart performance bands (Score 5–1) each age group needs to hit on every
+          Stamina test. Yo-Yo Intermittent is higher-is-better; Repeated Sprint Ability (RSA) is
+          lower-is-better.
         </p>
       </div>
       <Table>
@@ -60,10 +73,8 @@ export default async function SuperAdminStaminaBenchmarksPage() {
         <TableBody>
           {tests.map((test) => {
             const existing = benchmarksByTest.get(test.id) ?? new Map();
-            const completeBands = bands.filter((band) => {
-              const benchmark = existing.get(band.id);
-              return benchmark && STAMINA_BENCHMARK_TIERS.every((tier) => benchmark[tier]);
-            }).length;
+            const completeBands = bands.filter((band) => existing.has(band.id)).length;
+            const higherIsBetter = higherIsBetterByTest.get(test.id) ?? true;
 
             return (
               <TableRow key={test.id}>
@@ -76,7 +87,7 @@ export default async function SuperAdminStaminaBenchmarksPage() {
                   <StaminaBenchmarkDialog
                     testId={test.id}
                     testName={test.name}
-                    isBeepTest={test.unit === "level"}
+                    higherIsBetter={higherIsBetter}
                     unit={test.unit}
                     ageBands={bands}
                     existingBenchmarks={existing}

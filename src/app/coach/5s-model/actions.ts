@@ -7,12 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { coachBatchFilter } from "@/lib/coach/batch-access";
 import { isFiveSWindowOpen } from "@/lib/five-s/testing-window";
 import { getFiveSTests, getFiveSQuestions } from "@/lib/five-s/catalog";
-import { vo2MaxFromBeepTest, vo2MaxFromCooperTest } from "@/lib/five-s/vo2-max";
 import { logError } from "@/lib/logger";
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 // Shared by submitSkillScores/submitSpiritResponses — the coach-entered
 // overall category rating (five_s_category_notes.rating) that drives the
@@ -66,6 +61,79 @@ async function getLockedTestIds(
     .eq("player_id", playerId)
     .in("test_id", testIds);
   return new Set((data ?? []).filter((r) => r.recorded_by !== coachId).map((r) => r.test_id));
+}
+
+export type AutoSaveResult = { error?: string; saved?: boolean };
+
+// Auto-save for the score-entry forms: fired on blur, one test at a time, as
+// the coach types. Without it a category was all-or-nothing — the submit
+// actions reject the whole batch if any one field is empty, so a coach who
+// filled three of four, went back to check something and returned found the
+// form empty again. Saving each value as it is entered means a half-finished
+// category survives that trip (and the player hub's Add/Update label, which
+// is derived from whether a five_s_results row exists, reflects it).
+//
+// Deliberately not the submit path: no redirect (the coach stays on the
+// page) and the only revalidation is the player hub. Re-saving an unchanged
+// value is a no-op for the previous_score trigger, which only snapshots when
+// new.score is distinct from old.score.
+export async function autoSaveTestScore(
+  batchId: string,
+  playerId: string,
+  testId: string,
+  rawValue: string
+): Promise<AutoSaveResult> {
+  const coach = await requireRole("coach");
+  const supabase = await createClient();
+
+  const { data: batch } = await supabase
+    .from("batches")
+    .select("id, centre_id")
+    .eq("id", batchId)
+    .or(coachBatchFilter(coach.id))
+    .maybeSingle();
+
+  if (!batch) {
+    return { error: "You don't have access to this batch." };
+  }
+
+  const windowError = await assertTestingWindowOpen(supabase, batch.centre_id);
+  if (windowError) {
+    return { error: windowError };
+  }
+
+  const score = Number(rawValue);
+  if (rawValue.trim() === "" || !Number.isFinite(score) || score <= 0) {
+    // Empty, or mid-edit nonsense. There is simply nothing to save yet —
+    // not worth surfacing an error for.
+    return {};
+  }
+
+  const lockedTestIds = await getLockedTestIds(supabase, playerId, coach.id, [testId]);
+  if (lockedTestIds.has(testId)) {
+    return { error: "Already recorded by another coach — locked." };
+  }
+
+  const { error } = await supabase
+    .from("five_s_results")
+    .upsert(
+      {
+        player_id: playerId,
+        test_id: testId,
+        centre_id: batch.centre_id,
+        score,
+        recorded_by: coach.id,
+      },
+      { onConflict: "player_id,test_id" }
+    );
+
+  if (error) {
+    logError(`Failed to auto-save score for player ${playerId} test ${testId}:`, error);
+    return { error: "Failed to save score." };
+  }
+
+  revalidatePath(`/coach/5s-model/${batchId}/${playerId}`);
+  return { saved: true };
 }
 
 export type SpeedScoresFormState = { error?: string } | undefined;
@@ -260,16 +328,18 @@ export async function submitStaminaScores(
     player_id: string;
     test_id: string;
     centre_id: string;
-    score: number | null;
-    level: number | null;
-    shuttle: number | null;
-    vo2_max: number;
+    score: number;
+    level: null;
+    shuttle: null;
+    vo2_max: null;
     remarks: string;
     recorded_by: string;
   }[] = [];
 
-  // VO2 Max is never read from the form — it's always recomputed here from
-  // the coach's raw score, the one source of truth (see vo2-max.ts).
+  // Both Stamina tests record a single number (Yo-Yo completed level, RSA
+  // mean time). VO2 Max no longer applies to the new Stamina tests, so it's
+  // left null; the server scores each raw value against the age band's
+  // benchmark, not the client.
   for (const test of tests) {
     if (lockedTestIds.has(test.id)) continue;
     const remarks = String(formData.get(`remarks_${test.id}`) ?? "").trim();
@@ -277,40 +347,22 @@ export async function submitStaminaScores(
       return { error: "Remarks are required for every test." };
     }
 
-    if (test.unit === "level") {
-      const level = Number(formData.get(`level_${test.id}`));
-      const shuttle = Number(formData.get(`shuttle_${test.id}`));
-      if (!Number.isInteger(level) || level < 0 || !Number.isInteger(shuttle) || shuttle < 0) {
-        return { error: "Enter a valid Level and Shuttle for every test." };
-      }
-      rows.push({
-        player_id: playerId,
-        test_id: test.id,
-        centre_id: batch.centre_id,
-        score: null,
-        level,
-        shuttle,
-        vo2_max: round2(vo2MaxFromBeepTest(level, shuttle)),
-        remarks,
-        recorded_by: coach.id,
-      });
-    } else {
-      const score = Number(formData.get(`score_${test.id}`));
-      if (!Number.isFinite(score) || score <= 0) {
-        return { error: "Enter a valid score for every test." };
-      }
-      rows.push({
-        player_id: playerId,
-        test_id: test.id,
-        centre_id: batch.centre_id,
-        score,
-        level: null,
-        shuttle: null,
-        vo2_max: round2(vo2MaxFromCooperTest(score)),
-        remarks,
-        recorded_by: coach.id,
-      });
+    const score = Number(formData.get(`score_${test.id}`));
+    if (!Number.isFinite(score) || score <= 0) {
+      return { error: "Enter a valid score for every test." };
     }
+
+    rows.push({
+      player_id: playerId,
+      test_id: test.id,
+      centre_id: batch.centre_id,
+      score,
+      level: null,
+      shuttle: null,
+      vo2_max: null,
+      remarks,
+      recorded_by: coach.id,
+    });
   }
 
   const overallRemarks = String(formData.get("overall_remarks") ?? "").trim();
