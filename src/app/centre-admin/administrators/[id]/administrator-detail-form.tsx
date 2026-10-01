@@ -18,6 +18,8 @@ import {
 import { AdministratorProfileView } from "@/components/profile/administrator-profile-view";
 import { updateAdministrator, setAdministratorActive } from "../actions";
 import type { Database } from "@/lib/supabase/database.types";
+import { DocumentLinkView } from "@/components/profile/documents-section";
+import type { DocumentLinks } from "@/lib/storage/document-link";
 
 type StaffProfile = Database["public"]["Tables"]["staff_profiles"]["Row"];
 
@@ -35,6 +37,7 @@ export function AdministratorDetailForm({
   email,
   role,
   isActive,
+  updatedAt,
   isSelf,
   canEdit,
   staffProfile,
@@ -45,10 +48,11 @@ export function AdministratorDetailForm({
   email: string;
   role: string;
   isActive: boolean;
+  updatedAt: string;
   isSelf: boolean;
   canEdit: boolean;
   staffProfile: StaffProfile | null;
-  documentUrls: Record<string, string>;
+  documentUrls: DocumentLinks;
 }) {
   const updateWithId = updateAdministrator.bind(null, profileId);
   const [state, action, pending] = useActionState(updateWithId, undefined);
@@ -131,6 +135,7 @@ export function AdministratorDetailForm({
         </div>
 
         <form action={action} className="space-y-8">
+          <input type="hidden" name="updatedAt" value={updatedAt} />
           <FieldGroup className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="name">Name</FieldLabel>
@@ -277,9 +282,7 @@ export function AdministratorDetailForm({
               <FileInput id="aadhaarCard" name="aadhaarCard" />
               {documentUrls.aadhaar && (
                 <FieldDescription>
-                  <a href={documentUrls.aadhaar} target="_blank" rel="noreferrer" className="underline">
-                    View current file
-                  </a>
+                  <DocumentLinkView link={documentUrls.aadhaar} label="View current file" />
                 </FieldDescription>
               )}
             </Field>
@@ -288,9 +291,7 @@ export function AdministratorDetailForm({
               <FileInput id="birthCertificate" name="birthCertificate" />
               {documentUrls.birthCertificate && (
                 <FieldDescription>
-                  <a href={documentUrls.birthCertificate} target="_blank" rel="noreferrer" className="underline">
-                    View current file
-                  </a>
+                  <DocumentLinkView link={documentUrls.birthCertificate} label="View current file" />
                 </FieldDescription>
               )}
             </Field>
@@ -299,9 +300,7 @@ export function AdministratorDetailForm({
               <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
               {documentUrls.profilePicture && (
                 <FieldDescription>
-                  <a href={documentUrls.profilePicture} target="_blank" rel="noreferrer" className="underline">
-                    View current file
-                  </a>
+                  <DocumentLinkView link={documentUrls.profilePicture} label="View current file" />
                 </FieldDescription>
               )}
             </Field>
@@ -310,9 +309,7 @@ export function AdministratorDetailForm({
               <FileInput id="otherDocuments" name="otherDocuments" />
               {documentUrls.otherDocuments && (
                 <FieldDescription>
-                  <a href={documentUrls.otherDocuments} target="_blank" rel="noreferrer" className="underline">
-                    View current file
-                  </a>
+                  <DocumentLinkView link={documentUrls.otherDocuments} label="View current file" />
                 </FieldDescription>
               )}
             </Field>

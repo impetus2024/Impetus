@@ -19,6 +19,8 @@ import { PlayerProfileView, type PlayerProfileViewValues } from "@/components/pr
 import { selectLabel, cn } from "@/lib/utils";
 import { PackageField, CUSTOM_PACKAGE_VALUE, type PackageOption } from "../package-field";
 import type { PlayerFormState } from "../actions";
+import { DocumentLinkView } from "@/components/profile/documents-section";
+import type { DocumentLinks } from "@/lib/storage/document-link";
 
 type Option = { id: string; name: string };
 
@@ -44,7 +46,7 @@ export function PlayerProfileForm({
   packages: PackageOption[];
   batches: Option[];
   defaultValues: PlayerProfileDefaultValues;
-  documentLinks?: Record<string, string>;
+  documentLinks?: DocumentLinks;
   currentPackageIsCustom?: boolean;
   customPackageName?: string | null;
   customAmount?: number | null;
@@ -248,9 +250,7 @@ export function PlayerProfileForm({
           <FileInput id="aadhaarDoc" name="aadhaarDoc" />
           {documentLinks?.aadhaar && (
             <FieldDescription>
-              <a href={documentLinks.aadhaar} target="_blank" rel="noreferrer" className="underline">
-                View current file
-              </a>
+              <DocumentLinkView link={documentLinks.aadhaar} label="View current file" />
             </FieldDescription>
           )}
         </Field>
@@ -259,9 +259,7 @@ export function PlayerProfileForm({
           <FileInput id="medicalRecords" name="medicalRecords" />
           {documentLinks?.medicalRecords && (
             <FieldDescription>
-              <a href={documentLinks.medicalRecords} target="_blank" rel="noreferrer" className="underline">
-                View current file
-              </a>
+              <DocumentLinkView link={documentLinks.medicalRecords} label="View current file" />
             </FieldDescription>
           )}
         </Field>
@@ -270,9 +268,7 @@ export function PlayerProfileForm({
           <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
           {documentLinks?.profilePicture && (
             <FieldDescription>
-              <a href={documentLinks.profilePicture} target="_blank" rel="noreferrer" className="underline">
-                View current file
-              </a>
+              <DocumentLinkView link={documentLinks.profilePicture} label="View current file" />
             </FieldDescription>
           )}
         </Field>

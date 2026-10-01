@@ -1,5 +1,7 @@
 import { ViewField } from "@/components/view-field";
 import { calculateAge } from "@/lib/age";
+import { DocumentLinkView } from "@/components/profile/documents-section";
+import type { DocumentLinks } from "@/lib/storage/document-link";
 
 type Option = { id: string; name: string };
 
@@ -36,7 +38,7 @@ export function PlayerProfileView({
   playerTypes: Option[];
   packages: Option[];
   batches: Option[];
-  documentLinks?: Record<string, string>;
+  documentLinks?: DocumentLinks;
 }) {
   const lookup = (options: Option[], id: string | null) => options.find((o) => o.id === id)?.name;
 
@@ -69,17 +71,13 @@ export function PlayerProfileView({
       <ViewField
         label="Aadhaar Document"
         value={documentLinks?.aadhaar && (
-          <a href={documentLinks.aadhaar} target="_blank" rel="noreferrer" className="text-primary underline">
-            View file
-          </a>
+          <DocumentLinkView link={documentLinks.aadhaar} label="View file" className="text-primary underline" />
         )}
       />
       <ViewField
         label="Medical Records"
         value={documentLinks?.medicalRecords && (
-          <a href={documentLinks.medicalRecords} target="_blank" rel="noreferrer" className="text-primary underline">
-            View file
-          </a>
+          <DocumentLinkView link={documentLinks.medicalRecords} label="View file" className="text-primary underline" />
         )}
       />
     </div>

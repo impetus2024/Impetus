@@ -4,8 +4,7 @@ import * as z from "zod";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { uploadFile, UploadValidationError } from "@/lib/storage/r2";
-import { logError } from "@/lib/logger";
+import { insertInjuryWithReport } from "@/lib/injuries/report-document";
 
 const InjurySchema = z.object({
   dateOfInjury: z.string().min(1, { error: "Date is required." }),
@@ -52,39 +51,26 @@ export async function createInjury(
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  let reportDocPath: string | null = null;
-  const file = formData.get("reportDocument");
-  if (file instanceof File && file.size > 0) {
-    try {
-      reportDocPath = await uploadFile(file, `injury-reports/${playerId}`, "private", reporter.id);
-    } catch (err) {
-      if (err instanceof UploadValidationError) {
-        return { error: err.message };
-      }
-      logError(`Report document upload failed for injury on player ${playerId}:`, err);
-    }
-  }
-
   const supabase = await createClient();
-  const { error } = await supabase.from("injuries").insert({
-    player_id: playerId,
-    centre_id: reporter.centre_id!,
-    date_of_injury: parsed.data.dateOfInjury,
-    activity_type: parsed.data.activityType ?? null,
-    body_region: parsed.data.bodyRegion ?? null,
-    nature: parsed.data.nature ?? null,
-    cause: parsed.data.cause ?? null,
-    treating_person: parsed.data.treatingPerson ?? null,
-    initial_treatment: parsed.data.initialTreatment ?? null,
-    description: parsed.data.description ?? null,
-    report_doc_path: reportDocPath,
-    reported_by: reporter.id,
-  });
-
-  if (error) {
-    logError(`Failed to save injury report for player ${playerId}:`, error);
-    return { error: "Failed to save injury report." };
-  }
+  const { error } = await insertInjuryWithReport(
+    supabase,
+    formData,
+    {
+      player_id: playerId,
+      centre_id: reporter.centre_id!,
+      date_of_injury: parsed.data.dateOfInjury,
+      activity_type: parsed.data.activityType ?? null,
+      body_region: parsed.data.bodyRegion ?? null,
+      nature: parsed.data.nature ?? null,
+      cause: parsed.data.cause ?? null,
+      treating_person: parsed.data.treatingPerson ?? null,
+      initial_treatment: parsed.data.initialTreatment ?? null,
+      description: parsed.data.description ?? null,
+      reported_by: reporter.id,
+    },
+    reporter.id
+  );
+  if (error) return { error };
 
   revalidatePath(revalidatePathTarget);
   return undefined;

@@ -21,17 +21,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  STAMINA_BENCHMARK_TIERS,
-  type StaminaBenchmarkTier,
-  type TestBenchmark,
+  STAMINA_BENCHMARK_BOUNDARIES,
+  type StaminaBenchmark,
+  type StaminaBenchmarkBoundary,
 } from "@/lib/five-s/stamina-benchmarks";
 import { saveStaminaBenchmarks, type BenchmarkFormState } from "./actions";
 
-const TIER_LABEL: Record<StaminaBenchmarkTier, string> = {
-  poor_ceiling: "Poor (below)",
-  average_low: "Average – low",
-  average_high: "Average – high",
-  elite_floor: "Elite (above)",
+const BOUNDARY_LABEL: Record<StaminaBenchmarkBoundary, string> = {
+  score_5_boundary: "Score 5",
+  score_4_boundary: "Score 4",
+  score_3_boundary: "Score 3",
+  score_2_boundary: "Score 2",
 };
 
 type AgeBand = { id: string; label: string };
@@ -39,22 +39,22 @@ type AgeBand = { id: string; label: string };
 export function StaminaBenchmarkDialog({
   testId,
   testName,
-  isBeepTest,
+  higherIsBetter,
   unit,
   ageBands,
   existingBenchmarks,
 }: {
   testId: string;
   testName: string;
-  isBeepTest: boolean;
+  higherIsBetter: boolean;
   unit: string;
   ageBands: AgeBand[];
-  existingBenchmarks: Map<string, TestBenchmark>;
+  existingBenchmarks: Map<string, StaminaBenchmark>;
 }) {
   const action = saveStaminaBenchmarks.bind(
     null,
     testId,
-    isBeepTest,
+    higherIsBetter,
     ageBands.map((b) => b.id)
   );
   const { open, setOpen, pending, state, submit } = useDialogFormAction<BenchmarkFormState>(action);
@@ -72,10 +72,9 @@ export function StaminaBenchmarkDialog({
               <TableHeader>
                 <TableRow>
                   <TableHead>Age</TableHead>
-                  {STAMINA_BENCHMARK_TIERS.map((tier) => (
-                    <TableHead key={tier}>
-                      {TIER_LABEL[tier]}
-                      {!isBeepTest ? ` (${unit})` : ""}
+                  {STAMINA_BENCHMARK_BOUNDARIES.map((boundary) => (
+                    <TableHead key={boundary}>
+                      {BOUNDARY_LABEL[boundary]} {higherIsBetter ? "(≥)" : "(≤)"} ({unit})
                     </TableHead>
                   ))}
                 </TableRow>
@@ -86,48 +85,19 @@ export function StaminaBenchmarkDialog({
                   return (
                     <TableRow key={band.id}>
                       <TableCell className="font-medium whitespace-nowrap">{band.label}</TableCell>
-                      {STAMINA_BENCHMARK_TIERS.map((tier) => {
-                        const point = existing?.[tier];
-                        return (
-                          <TableCell key={tier}>
-                            {isBeepTest ? (
-                              <div className="flex items-center gap-1">
-                                <Input
-                                  name={`${band.id}_${tier}_level`}
-                                  type="number"
-                                  step="1"
-                                  min="0"
-                                  placeholder="L"
-                                  defaultValue={point?.level ?? ""}
-                                  required
-                                  className="w-16"
-                                />
-                                <span className="text-muted-foreground">/</span>
-                                <Input
-                                  name={`${band.id}_${tier}_shuttle`}
-                                  type="number"
-                                  step="1"
-                                  min="0"
-                                  placeholder="S"
-                                  defaultValue={point?.shuttle ?? ""}
-                                  required
-                                  className="w-16"
-                                />
-                              </div>
-                            ) : (
-                              <Input
-                                name={`${band.id}_${tier}_value`}
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                defaultValue={point?.value ?? ""}
-                                required
-                                className="w-24"
-                              />
-                            )}
-                          </TableCell>
-                        );
-                      })}
+                      {STAMINA_BENCHMARK_BOUNDARIES.map((boundary) => (
+                        <TableCell key={boundary}>
+                          <Input
+                            name={`${band.id}_${boundary}`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={existing?.[boundary] ?? ""}
+                            required
+                            className="w-24"
+                          />
+                        </TableCell>
+                      ))}
                     </TableRow>
                   );
                 })}

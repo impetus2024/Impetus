@@ -24,7 +24,7 @@ export default async function AdministratorDetailPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role, is_active")
+    .select("id, full_name, email, role, is_active, updated_at")
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!)
     .maybeSingle();
@@ -61,6 +61,7 @@ export default async function AdministratorDetailPage({
         email={profile.email}
         role={profile.role}
         isActive={profile.is_active}
+        updatedAt={profile.updated_at}
         isSelf={profile.id === centreAdmin.id}
         canEdit={canEdit}
         staffProfile={staffProfile}

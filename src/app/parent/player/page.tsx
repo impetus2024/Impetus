@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/dal";
 import { getParentChildren } from "@/lib/parent/children";
 import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
+import { documentUrl } from "@/lib/storage/document-link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProfileCard } from "@/components/profile/profile-card";
 import { ProfileMenu, type ProfileSection } from "@/components/profile/profile-menu";
@@ -130,7 +131,7 @@ async function PlayerProfileSections({
           batchName={batches[0]?.name ?? null}
           playerTypeName={playerTypes[0]?.name ?? null}
           isActive={player.is_active}
-          profilePictureUrl={documentLinks.profilePicture}
+          profilePictureUrl={documentUrl(documentLinks.profilePicture)}
         />
         <Card className="rounded-2xl border-border/50 py-3 shadow-soft">
           <CardContent className="px-3">

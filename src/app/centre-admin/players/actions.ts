@@ -6,10 +6,17 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
+import {
+  uploadDocFields,
+  deleteReplacedDocs,
+  discardUploadedDocs,
+  guardDocColumns,
+  DOCUMENT_CHANGED_MESSAGE,
+} from "@/lib/storage/upload-doc-fields";
 import {
   provisionUser,
   changeLoginEmail,
+  loginEmailInUse,
   sendLoginEmailChangedNotice,
 } from "@/lib/auth/provision-user";
 import { sendWhatsAppWelcomeTemplate } from "@/lib/whatsapp/send";
@@ -471,6 +478,9 @@ export async function createPlayer(
 
   if (error || !player) {
     logError(`Failed to create player for centre ${centreAdmin.centre_id}:`, error);
+    // The row was rejected, so this request's uploads are unreferenced (see
+    // updatePlayer for why an error without a code is left alone).
+    if (error?.code) await discardUploadedDocs(uploads.values);
     return { error: "Failed to create player." };
   }
 
@@ -613,15 +623,26 @@ export async function updatePlayer(
   }
   Object.assign(update, uploads.values);
 
-  const { error } = await supabase
-    .from("players")
-    .update(update)
-    .eq("id", id)
-    .eq("centre_id", centreAdmin.centre_id!);
+  const { data: saved, error } = await guardDocColumns(
+    supabase.from("players").update(update).eq("id", id).eq("centre_id", centreAdmin.centre_id!),
+    existing,
+    uploads.values
+  ).select("id");
 
   if (error) {
     logError(`Failed to save player ${id}:`, error);
+    // A Postgres error code means the statement was rejected; without one the
+    // outcome is unknown, so the new objects are kept rather than risk
+    // deleting a document the row may now reference.
+    if (error.code) await discardUploadedDocs(uploads.values);
     return { error: "Failed to save player." };
+  }
+
+  // Zero rows: another request replaced one of these documents after this one
+  // read it. That request's object stays referenced; this one's is discarded.
+  if (Object.keys(uploads.values).length > 0 && !saved?.length) {
+    await discardUploadedDocs(uploads.values);
+    return { error: DOCUMENT_CHANGED_MESSAGE };
   }
 
   await syncPlayerBatches(supabase, id, centreAdmin.centre_id!, [d.batchId, ...d.additionalBatchIds]);
@@ -634,7 +655,14 @@ export async function updatePlayer(
     newPackageId: packageId,
   });
 
-  if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
+  if (existing) {
+    deleteReplacedDocs<DocColumn>(existing, uploads.values, {
+      entityType: "player",
+      entityId: id,
+      centreId: centreAdmin.centre_id,
+      actorId: centreAdmin.id,
+    });
+  }
 
   revalidatePath(PATH);
   revalidatePath(`/centre-admin/players/${id}`);
@@ -764,15 +792,23 @@ export async function updatePlayerProfile(
   }
   Object.assign(update, uploads.values);
 
-  const { error } = await supabase
-    .from("players")
-    .update(update)
-    .eq("id", id)
-    .eq("centre_id", centreAdmin.centre_id!);
+  const { data: saved, error } = await guardDocColumns(
+    supabase.from("players").update(update).eq("id", id).eq("centre_id", centreAdmin.centre_id!),
+    existing,
+    uploads.values
+  ).select("id");
 
   if (error) {
     logError(`Failed to save player profile ${id}:`, error);
+    // See updatePlayer: only discard when the statement was definitely rejected.
+    if (error.code) await discardUploadedDocs(uploads.values);
     return { error: "Failed to save player profile." };
+  }
+
+  // See updatePlayer: another request replaced one of these documents first.
+  if (Object.keys(uploads.values).length > 0 && !saved?.length) {
+    await discardUploadedDocs(uploads.values);
+    return { error: DOCUMENT_CHANGED_MESSAGE };
   }
 
   await syncPlayerBatches(supabase, id, centreAdmin.centre_id!, [d.batchId, ...d.additionalBatchIds]);
@@ -785,7 +821,14 @@ export async function updatePlayerProfile(
     newPackageId: packageId,
   });
 
-  if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
+  if (existing) {
+    deleteReplacedDocs<DocColumn>(existing, uploads.values, {
+      entityType: "player",
+      entityId: id,
+      centreId: centreAdmin.centre_id,
+      actorId: centreAdmin.id,
+    });
+  }
 
   revalidatePath(PATH);
   revalidatePath(`/centre-admin/players/${id}`);
@@ -985,18 +1028,69 @@ export async function updateParentProfile(
   // re-sends the notification.
   const copyRepair = emailChanging && link != null && emailsEqual(d.parentEmail, linkedParentEmail);
 
+  // A duplicate address is rejected before anything is claimed or written, so
+  // the common failure leaves the form's version token valid for a retry.
+  if (
+    emailChanging &&
+    link &&
+    !copyRepair &&
+    (await loginEmailInUse(d.parentEmail, link.parent_id))
+  ) {
+    return { error: EMAIL_IN_USE_MESSAGE };
+  }
+
+  // The version this request must still match at the final write below.
+  let expectedVersion = d.updatedAt;
+
+  // Claim the row BEFORE any auth/sibling side effect. Everything above is
+  // read-only; from here on the login and the sibling copies can move, and
+  // neither store can be rolled back. The compare-and-swap on updated_at is
+  // the authoritative stale check: it matches only if nobody has written this
+  // player since the form loaded, and a no-op write is enough because
+  // set_updated_at bumps the version on every UPDATE. A stale form matches zero
+  // rows here and returns without touching auth.users, profiles.email, the
+  // sessions or the siblings -- so it can never re-assert the email it was
+  // loaded with. Because the row cannot have changed since the form loaded,
+  // the `existing.parent_email` read above is exactly what the form displayed,
+  // which is what makes `emailChanging` a statement of the admin's intent.
+  // The final write is then made against the claimed version, and a request
+  // that fails after this point re-renders the page so the retry carries it.
+  if (emailChanging && link) {
+    const { data: claimed, error: claimError } = await supabase
+      .from("players")
+      .update({ parent_email: existing.parent_email })
+      .eq("id", id)
+      .eq("centre_id", centreAdmin.centre_id!)
+      .eq("updated_at", d.updatedAt)
+      .select("updated_at")
+      .maybeSingle();
+
+    if (claimError) {
+      logError(`Failed to claim player ${id} for a parent email change:`, claimError);
+      return { error: "Failed to update the parent's login email." };
+    }
+    if (!claimed) {
+      return { error: STALE_PROFILE_MESSAGE };
+    }
+    expectedVersion = claimed.updated_at;
+  }
+
+  const failAfterClaim = (error: string): PlayerFormState => {
+    revalidatePath(`/centre-admin/players/${id}`);
+    return { error };
+  };
+
   if (emailChanging && link && !copyRepair) {
     // Shared with the coach email change (see changeLoginEmail): updates
     // auth.users, maps a duplicate address to EMAIL_IN_USE_MESSAGE, and
     // revokes the parent's existing sessions once the email has moved.
     const emailResult = await changeLoginEmail(link.parent_id, d.parentEmail);
     if (emailResult !== "ok") {
-      return {
-        error:
-          emailResult === "email_in_use"
-            ? EMAIL_IN_USE_MESSAGE
-            : "Failed to update the parent's login email.",
-      };
+      return failAfterClaim(
+        emailResult === "email_in_use"
+          ? EMAIL_IN_USE_MESSAGE
+          : "Failed to update the parent's login email."
+      );
     }
 
     // The address on the account has moved at this point. Record what it
@@ -1022,7 +1116,7 @@ export async function updateParentProfile(
         `Failed to sync parent_email to sibling players ${siblingIds.join(", ")} for parent ${link.parent_id}:`,
         siblingUpdateError
       );
-      return { error: "Failed to update the parent's login email." };
+      return failAfterClaim("Failed to update the parent's login email.");
     }
   }
 
@@ -1047,17 +1141,17 @@ export async function updateParentProfile(
     .update(update)
     .eq("id", id)
     .eq("centre_id", centreAdmin.centre_id!)
-    .eq("updated_at", d.updatedAt)
+    .eq("updated_at", expectedVersion)
     .select("parent_email")
     .maybeSingle();
 
   if (error) {
     logError(`Failed to save parent profile for player ${id}:`, error);
-    return { error: "Failed to save parent profile." };
+    return failAfterClaim("Failed to save parent profile.");
   }
 
   if (!player) {
-    return { error: STALE_PROFILE_MESSAGE };
+    return failAfterClaim(STALE_PROFILE_MESSAGE);
   }
 
   // Heals a parent_player_links row that createPlayer's own parent

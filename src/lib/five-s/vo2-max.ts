@@ -4,6 +4,11 @@
 // always recomputes from the submitted raw score rather than trusting
 // whatever the client displayed, so there's one source of truth even
 // though the formula itself lives in one shared place.
+//
+// DEPRECATED: The new Stamina model (Yo-Yo Intermittent, Repeated Sprint Ability)
+// no longer uses VO2 Max scoring. These helpers are retained only for legacy
+// compatibility with historical Beep Test / Cooper Test results that may still
+// exist in five_s_results. New Stamina tests store vo2_max = null.
 
 // Ramsbottom Equation (British Journal of Sports Medicine) — standard
 // Beep/Bleep Test VO2 Max estimate from final level (L) and shuttle (S).

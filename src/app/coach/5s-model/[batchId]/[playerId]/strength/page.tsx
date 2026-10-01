@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { TestingWindowBanner } from "@/components/five-s/testing-window-banner";
 import { getFiveSWindowStatus } from "@/lib/five-s/testing-window";
+import { calculateAge } from "@/lib/age";
 import { getFiveSTests } from "@/lib/five-s/catalog";
+import { findStrengthAgeBand } from "@/lib/five-s/strength-benchmarks";
+import { strengthTestGuidance } from "@/lib/five-s/strength-test-guidance";
 import { StrengthScoreForm } from "./strength-score-form";
 
 export default async function Coach5sModelStrengthPage({
@@ -31,7 +34,7 @@ export default async function Coach5sModelStrengthPage({
 
   const { data: player } = await supabase
     .from("players")
-    .select("id, name, player_batches!inner(batch_id)")
+    .select("id, name, date_of_birth, gender, player_batches!inner(batch_id)")
     .eq("id", playerId)
     .eq("player_batches.batch_id", batchId)
     .maybeSingle();
@@ -45,14 +48,34 @@ export default async function Coach5sModelStrengthPage({
     .single();
   const windowStatus = getFiveSWindowStatus(centre?.five_s_window_start ?? null, centre?.five_s_window_end ?? null);
 
-  const [allTests, { data: results }] = await Promise.all([
+  const [allTests, { data: results }, { data: strengthAgeBands }] = await Promise.all([
     getFiveSTests(),
     supabase
       .from("five_s_results")
       .select("test_id, score, recorded_by")
       .eq("player_id", playerId),
+    supabase
+      .from("five_s_age_bands")
+      .select("id, label, min_age, max_age, gender")
+      .eq("category", "strength")
+      .order("display_order"),
   ]);
   const tests = allTests.filter((t) => t.category === "strength");
+
+  // Strength tests use age/gender-specific benchmarks, so the coach needs
+  // to see the player's correct band. The band comes from the same
+  // gender-aware lookup scoring uses (findStrengthAgeBand).
+  const strengthBand = findStrengthAgeBand(
+    calculateAge(player.date_of_birth),
+    player.gender,
+    strengthAgeBands ?? []
+  );
+  const guidance = new Map(
+    tests.flatMap((t) => {
+      const g = strengthTestGuidance(t.name, strengthBand?.label ?? null);
+      return g ? [[t.id, g] as const] : [];
+    })
+  );
 
   const existingScores = new Map(
     (results ?? []).flatMap((r) => (r.score != null ? [[r.test_id, r.score] as const] : []))
@@ -88,6 +111,7 @@ export default async function Coach5sModelStrengthPage({
               tests={tests}
               existingScores={existingScores}
               lockedTestIds={lockedTestIds}
+              guidance={guidance}
             />
           </CardContent>
         </Card>

@@ -5,11 +5,19 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { uploadDocFields, deleteReplacedDocs } from "@/lib/storage/upload-doc-fields";
+import {
+  uploadDocFields,
+  deleteReplacedDocs,
+  discardUploadedDocs,
+  guardDocColumns,
+  DOCUMENT_CHANGED_MESSAGE,
+  DOCUMENT_UPLOAD_FAILED_MESSAGE,
+} from "@/lib/storage/upload-doc-fields";
 import {
   provisionUser,
   resetUserPassword,
   changeLoginEmail,
+  loginEmailInUse,
   sendLoginEmailChangedNotice,
   revokeUserSessions,
   ProvisionUserError,
@@ -126,11 +134,13 @@ export async function createAdministrator(
 
   // The auth account already exists by this point (provisionUser above),
   // so a rejected/failed document here can't abort the whole action the
-  // way it does in createPlayer — just skip it and log, the account still
-  // needs to be usable. It can be attached later from the detail page.
+  // way it does in createPlayer — the account is still created and usable, and
+  // no document is saved (uploadDocFields is all-or-nothing and removes what it
+  // did upload). The failure is reported back below so the documents can be
+  // attached again from the detail page.
   const uploads = await uploadDocFields(formData, docFields, `staff-documents/${userId}`, centreAdmin.id);
   if (uploads.error) {
-    logError(`Document rejected while creating administrator ${userId}:`, uploads.error);
+    logError(`Documents not saved while creating administrator ${userId}:`, uploads.error);
   }
   Object.assign(staffProfile, uploads.values);
 
@@ -140,25 +150,43 @@ export async function createAdministrator(
 
   if (staffError) {
     logError(`Failed to save staff_profiles for new administrator ${userId}:`, staffError);
+    // The insert was rejected, so this request's uploads are unreferenced.
+    if (staffError.code) await discardUploadedDocs(uploads.values);
     return { error: "Account created, but saving staff details failed." };
   }
 
   revalidatePath("/centre-admin/administrators");
 
-  if (!emailSent) {
-    return {
-      error:
-        "Account created, but the invite email couldn't be sent — use \"Reset Password\" from this administrator's row to generate a temporary password you can share directly.",
-    };
+  const notices: string[] = [];
+  if (uploads.error) {
+    // The generic storage-failure message says "nothing was saved" and "try
+    // again", both wrong here: the account exists, and resubmitting this form
+    // would only fail on the now-taken email.
+    const reason =
+      uploads.error === DOCUMENT_UPLOAD_FAILED_MESSAGE ? "storage couldn't be reached." : uploads.error;
+    notices.push(
+      `The account was created, but its documents were not saved (${reason}) Attach them again from this administrator's page instead of submitting this form again.`
+    );
   }
-  return undefined;
+  if (!emailSent) {
+    notices.push(
+      "Account created, but the invite email couldn't be sent — use \"Reset Password\" from this administrator's row to generate a temporary password you can share directly."
+    );
+  }
+  return notices.length ? { error: notices.join(" ") } : undefined;
 }
 
 const UpdateAdministratorSchema = StaffDetailsSchema.extend({
   role: StaffRole,
   email: z.email({ error: "Enter a valid email." }).optional(),
   dateOfJoining: z.iso.date({ error: "Enter a valid date of joining." }).optional(),
+  updatedAt: z.string().optional(),
 });
+
+// Shown when the form's profiles.updated_at no longer matches the row: someone
+// else saved this administrator (or changed their login) since it was loaded.
+const STALE_ADMINISTRATOR_MESSAGE =
+  "This administrator was changed by someone else. Reload the page and try again.";
 
 // Shown when a login email is already taken by a different account — same
 // wording as the parent email change (centre-admin/players/actions.ts).
@@ -194,10 +222,17 @@ export async function updateAdministrator(
     role: formData.get("role"),
     email: emptyToUndefined(formData.get("email")),
     dateOfJoining: emptyToUndefined(formData.get("dateOfJoining")),
+    updatedAt: emptyToUndefined(formData.get("updatedAt")),
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  // Without the version the form was loaded with, the request can't prove it
+  // isn't overwriting a newer save (or reverting a newer login email).
+  if (!parsed.data.updatedAt) {
+    return { error: STALE_ADMINISTRATOR_MESSAGE };
   }
 
   const supabase = await createClient();
@@ -240,43 +275,6 @@ export async function updateAdministrator(
     return { error: "Only a coach's login email can be changed here." };
   }
 
-  // First, before any other write: a rejected address (already in use) then
-  // leaves nothing half-saved. Once the login has moved, the owner is told at
-  // the new address straight away — the same password-setup notice a parent
-  // gets — since nothing below can undo the auth change.
-  let emailChangeNotified = true;
-  if (emailChanging) {
-    const result = await changeLoginEmail(profileId, newEmail);
-    if (result !== "ok") {
-      return {
-        error: result === "email_in_use" ? EMAIL_IN_USE_MESSAGE : "Failed to update the coach's login email.",
-      };
-    }
-
-    try {
-      await sendLoginEmailChangedNotice({
-        userId: profileId,
-        newEmail,
-        previousEmail: target.email,
-        fullName: parsed.data.name,
-        centreId: centreAdmin.centre_id!,
-      });
-    } catch (err) {
-      emailChangeNotified = false;
-      logError(`Email-change notification not sent to ${newEmail} for coach ${profileId}:`, err);
-    }
-  }
-
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .update({ full_name: parsed.data.name, role: parsed.data.role })
-    .eq("id", profileId);
-
-  if (profileError) {
-    logError(`Failed to save profile for administrator ${profileId}:`, profileError);
-    return { error: "Failed to save changes." };
-  }
-
   type DocColumn =
     | "aadhaar_doc_path"
     | "birth_certificate_path"
@@ -295,37 +293,134 @@ export async function updateAdministrator(
     .eq("profile_id", profileId)
     .maybeSingle();
 
+  // Uploaded before anything is written, so a failed or rejected document
+  // stops the whole save (nothing is saved, and uploadDocFields has already
+  // removed whatever it did upload). From here on, every early return also
+  // discards this request's uploads: they are only kept once the staff_profiles
+  // write at the end has pointed at them.
   const uploads = await uploadDocFields(formData, docFields, `staff-documents/${profileId}`, centreAdmin.id);
   if (uploads.error) {
     return { error: uploads.error };
   }
+  const failAndDiscard = async (error: string): Promise<UpdateAdministratorState> => {
+    await discardUploadedDocs(uploads.values);
+    return { error };
+  };
 
-  // upsert, not update: an administrator provisioned outside this form's own
-  // "create" flow (the centre's first admin, auto-provisioned by
-  // super-admin's createCentre; or a directly-seeded test account) never
-  // gets a staff_profiles row in the first place. update() against a
-  // profile_id with no matching row silently affects zero rows and returns
-  // no error — every field on this form would appear to save while nothing
-  // actually persisted. upsert creates the row the first time, updates it
-  // after.
-  const { error } = await supabase
-    .from("staff_profiles")
-    .upsert(
-      {
-        profile_id: profileId,
-        ...staffDetailsColumns(parsed.data),
-        date_of_joining: parsed.data.dateOfJoining ?? null,
-        ...uploads.values,
-      },
-      { onConflict: "profile_id" }
-    );
+  // Read-only duplicate check first, so the ordinary "address already taken"
+  // rejection happens before anything is written.
+  if (emailChanging && (await loginEmailInUse(newEmail, profileId))) {
+    return failAndDiscard(EMAIL_IN_USE_MESSAGE);
+  }
 
-  if (error) {
-    logError(`Failed to save staff_profiles for administrator ${profileId}:`, error);
+  // The name/role write doubles as the stale check, and runs BEFORE the login
+  // moves: a compare-and-swap on profiles.updated_at that matches only if
+  // nobody has written this profile since the form loaded. A stale form (whose
+  // email field still holds the address it was loaded with) matches zero rows
+  // and returns here, before any auth.users/profiles.email change or session
+  // revocation, so it can never revert a newer login email. Email changes
+  // always bump profiles.updated_at (handle_auth_user_sync upserts the row), so
+  // the version covers them too. It can't be the guard on a later write: the
+  // email move below bumps the version again.
+  const { data: saved, error: profileError } = await supabase
+    .from("profiles")
+    .update({ full_name: parsed.data.name, role: parsed.data.role })
+    .eq("id", profileId)
+    .eq("centre_id", centreAdmin.centre_id!)
+    .eq("updated_at", parsed.data.updatedAt)
+    .select("id")
+    .maybeSingle();
+
+  if (profileError) {
+    logError(`Failed to save profile for administrator ${profileId}:`, profileError);
+    return failAndDiscard("Failed to save changes.");
+  }
+
+  if (!saved) {
+    return failAndDiscard(STALE_ADMINISTRATOR_MESSAGE);
+  }
+
+  // Once the login has moved, the owner is told at the new address straight
+  // away — the same password-setup notice a parent gets — since nothing below
+  // can undo the auth change.
+  let emailChangeNotified = true;
+  if (emailChanging) {
+    const result = await changeLoginEmail(profileId, newEmail);
+    if (result !== "ok") {
+      return failAndDiscard(
+        `${
+          result === "email_in_use" ? EMAIL_IN_USE_MESSAGE : "Failed to update the coach's login email."
+        } The name and role were saved.`
+      );
+    }
+
+    try {
+      await sendLoginEmailChangedNotice({
+        userId: profileId,
+        newEmail,
+        previousEmail: target.email,
+        fullName: parsed.data.name,
+        centreId: centreAdmin.centre_id!,
+      });
+    } catch (err) {
+      emailChangeNotified = false;
+      logError(`Email-change notification not sent to ${newEmail} for coach ${profileId}:`, err);
+    }
+  }
+
+  // A row is created when there is none: an administrator provisioned outside
+  // this form's own "create" flow (the centre's first admin, auto-provisioned
+  // by super-admin's createCentre; or a directly-seeded test account) never
+  // gets a staff_profiles row in the first place, and update() against a
+  // profile_id with no matching row silently affects zero rows.
+  //
+  // Both branches are conflict-safe for documents. staff_profiles has no
+  // updated_at, so an existing row is updated with a compare-and-swap on the
+  // document columns being replaced (guardDocColumns), and a missing row is
+  // inserted, which loses cleanly (23505) to a concurrent insert instead of
+  // upserting over it. Either way the losing request's uploads are discarded
+  // and the winner's stay referenced.
+  const staffValues = {
+    ...staffDetailsColumns(parsed.data),
+    date_of_joining: parsed.data.dateOfJoining ?? null,
+    ...uploads.values,
+  };
+  let staffSaved = true;
+  let staffError: { code?: string } | null = null;
+  if (existing) {
+    const result = await guardDocColumns(
+      supabase.from("staff_profiles").update(staffValues).eq("profile_id", profileId),
+      existing,
+      uploads.values
+    ).select("profile_id");
+    staffError = result.error;
+    staffSaved = (result.data?.length ?? 0) > 0;
+  } else {
+    staffError = (
+      await supabase.from("staff_profiles").insert({ profile_id: profileId, ...staffValues })
+    ).error;
+  }
+
+  if (
+    staffError?.code === "23505" ||
+    (!staffError && !staffSaved && Object.keys(uploads.values).length > 0)
+  ) {
+    return failAndDiscard(DOCUMENT_CHANGED_MESSAGE);
+  }
+  if (staffError) {
+    logError(`Failed to save staff_profiles for administrator ${profileId}:`, staffError);
+    if (staffError.code) await discardUploadedDocs(uploads.values);
     return { error: "Failed to save changes." };
   }
 
-  if (existing) deleteReplacedDocs<DocColumn>(existing, uploads.values);
+  if (existing) {
+    deleteReplacedDocs<DocColumn>(existing, uploads.values, {
+      entityType: "staff_profile",
+      entityId: profileId,
+      centreId: centreAdmin.centre_id,
+      actorId: centreAdmin.id,
+    });
+  }
 
   revalidatePath(`/centre-admin/administrators/${profileId}`);
   revalidatePath("/centre-admin/administrators");

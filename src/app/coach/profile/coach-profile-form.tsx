@@ -10,6 +10,8 @@ import { Field, FieldLabel, FieldGroup, FieldDescription, FILLED_INPUT } from "@
 import { AdministratorProfileView } from "@/components/profile/administrator-profile-view";
 import { updateOwnCoachProfile, type CoachProfileState } from "./actions";
 import type { Database } from "@/lib/supabase/database.types";
+import { DocumentLinkView } from "@/components/profile/documents-section";
+import type { DocumentLinks } from "@/lib/storage/document-link";
 
 type StaffProfile = Database["public"]["Tables"]["staff_profiles"]["Row"];
 
@@ -33,7 +35,7 @@ export function CoachProfileForm({
 }: {
   fullName: string;
   staffProfile: StaffProfile | null;
-  documentUrls: Record<string, string>;
+  documentUrls: DocumentLinks;
 }) {
   const [state, action, pending] = useActionState<CoachProfileState, FormData>(
     updateOwnCoachProfile,
@@ -133,9 +135,7 @@ export function CoachProfileForm({
               <FileInput id="profilePicture" name="profilePicture" accept="image/*" />
               {documentUrls.profilePicture && (
                 <FieldDescription>
-                  <a href={documentUrls.profilePicture} target="_blank" rel="noreferrer" className="underline">
-                    View current file
-                  </a>
+                  <DocumentLinkView link={documentUrls.profilePicture} label="View current file" />
                 </FieldDescription>
               )}
             </Field>

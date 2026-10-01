@@ -4,7 +4,6 @@ import {
   CalendarCheck,
   UserCog,
   DoorOpen,
-  Wallet,
   UserPlus,
   CalendarPlus,
   ReceiptText,
@@ -13,12 +12,10 @@ import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { StatCard } from "@/components/stat-card";
 import { InsightBanner } from "@/components/insight-banner";
-import { SimpleBarChart } from "@/components/charts/simple-bar-chart";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MonthlyHighlightsFeed } from "@/components/monthly-highlights/monthly-highlights-feed";
 import { NewsEventsFeed } from "@/components/news-events/news-events-feed";
-import { getLastNMonths, monthKeyOf } from "@/lib/months";
 
 const QUICK_ACTIONS = [
   { href: "/centre-admin/players/new", label: "Add Player", icon: UserPlus },
@@ -33,51 +30,29 @@ export default async function CentreAdminDashboard() {
   const supabase = await createClient();
   const centreId = centreAdmin.centre_id!;
 
-  const months = getLastNMonths(6);
-
-  const [players, batches, staff, checkedIn, paymentsByMonthRows] =
-    await Promise.all([
-      supabase
-        .from("players")
-        .select("id", { count: "exact", head: true })
-        .eq("centre_id", centreId)
-        .eq("is_active", true),
-      supabase
-        .from("batches")
-        .select("id", { count: "exact", head: true })
-        .eq("centre_id", centreId)
-        .eq("is_active", true),
-      supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("centre_id", centreId)
-        .in("role", ["coach", "medical", "centre_admin", "staff", "finance"])
-        .eq("is_active", true),
-      supabase
-        .from("players")
-        .select("id", { count: "exact", head: true })
-        .eq("centre_id", centreId)
-        .eq("is_checked_in", true),
-      // Grouped in SQL (see payments_by_month's migration) instead of
-      // pulling every payment row for the window and summing it per month
-      // in JS.
-      supabase.rpc("payments_by_month", {
-        p_centre_id: centreId,
-        p_since: months[0].start.toISOString().slice(0, 10),
-      }),
-    ]);
-
-  const totalByMonthKey = new Map(
-    (paymentsByMonthRows.data ?? []).map((row) => [monthKeyOf(row.month), row.total])
-  );
-
-  const paymentsByMonth = months.map((m) => ({
-    label: m.label,
-    value: totalByMonthKey.get(m.key) ?? 0,
-  }));
-
-  // months' last entry is always the current month (see getLastNMonths).
-  const paymentsThisMonth = paymentsByMonth[paymentsByMonth.length - 1]?.value ?? 0;
+  const [players, batches, staff, checkedIn] = await Promise.all([
+    supabase
+      .from("players")
+      .select("id", { count: "exact", head: true })
+      .eq("centre_id", centreId)
+      .eq("is_active", true),
+    supabase
+      .from("batches")
+      .select("id", { count: "exact", head: true })
+      .eq("centre_id", centreId)
+      .eq("is_active", true),
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("centre_id", centreId)
+      .in("role", ["coach", "medical", "centre_admin", "staff", "finance"])
+      .eq("is_active", true),
+    supabase
+      .from("players")
+      .select("id", { count: "exact", head: true })
+      .eq("centre_id", centreId)
+      .eq("is_checked_in", true),
+  ]);
 
   const playerCount = players.count ?? 0;
   const batchCount = batches.count ?? 0;
@@ -107,28 +82,17 @@ export default async function CentreAdminDashboard() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active Players" value={playerCount} icon={Users} />
         <StatCard label="Active Batches" value={batchCount} icon={CalendarCheck} />
         <StatCard label="Staff" value={staffCount} icon={UserCog} />
         <StatCard label="Checked In Now" value={checkedIn.count ?? 0} icon={DoorOpen} />
-        <StatCard label="Payments This Month" value={paymentsThisMonth.toFixed(0)} icon={Wallet} />
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
         <NewsEventsFeed />
         <MonthlyHighlightsFeed />
       </div>
-
-      <Card className="rounded-2xl border-border/70 shadow-card">
-        <CardHeader>
-          <CardTitle>Payments</CardTitle>
-          <CardDescription>Collected per month, last 6 months</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SimpleBarChart data={paymentsByMonth} />
-        </CardContent>
-      </Card>
 
       {canEdit && (
         <Card className="rounded-2xl border-border/70 shadow-card">

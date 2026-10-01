@@ -1,127 +1,152 @@
-// Stamina scoring: unlike Speed's single Min/Max/Avg, each (test, age band)
-// has 4 threshold points — poor_ceiling, average_low, average_high,
-// elite_floor — dividing a raw result into 5 zones for a 1-5 rating.
-// A point is either a plain number (Cooper Test, metres) or a Level/Shuttle
-// pair (Beep Test), compared lexicographically: level first, shuttle only
-// breaks a tie within the same level (see five_s_stamina_benchmarks_shape
-// check constraint — exactly one of the two shapes is ever set).
+// Stamina scoring: each (test, age band) has four band boundaries that
+// divide a raw result into the five Kickstart performance bands (Score 5..1).
+// Direction is per test and stored on the benchmark row:
+//   - Yo-Yo Intermittent is higher-is-better (completed level). The four
+//     boundaries are the band minimums (floors): score 5 >= score_5_boundary,
+//     score 4 >= score_4_boundary, score 3 >= score_3_boundary,
+//     score 2 >= score_2_boundary, and score 1 is anything below
+//     score_2_boundary.
+//   - Repeated Sprint Ability (RSA) is lower-is-better (mean time). The four
+//     boundaries are the band maximums (ceilings): score 5 <= score_5_boundary,
+//     score 4 <= score_4_boundary, score 3 <= score_3_boundary,
+//     score 2 <= score_2_boundary, and score 1 is anything above
+//     score_2_boundary.
+//
+// SOURCE-BOUNDARY NOTE: the Kickstart source prints its bands as ranges and
+// leaves a few one-decimal gaps (e.g. U-13 Yo-Yo: 16.9 and 17.0 sit between
+// Score 3's "15.6-16.8" and Score 4's "17.1-18.4"; 14.0 sits between Score
+// 1's "<14.0" and Score 2's "14.1-15.5"). The four-boundary representation
+// is contiguous by design, so those gap values resolve to the lower band:
+// for higher-is-better a value below score_4_boundary but at/above
+// score_3_boundary rates 3, and a value below score_2_boundary rates 1.
+// The source values themselves are stored unmodified — nothing is rounded or
+// "corrected" — this resolution rule is the deterministic interpretation
+// required by the contiguous 5-band scoring shape.
 
-export const STAMINA_BENCHMARK_TIERS = [
-  "poor_ceiling",
-  "average_low",
-  "average_high",
-  "elite_floor",
+export type StaminaBenchmark = {
+  higher_is_better: boolean;
+  score_5_boundary: number;
+  score_4_boundary: number;
+  score_3_boundary: number;
+  score_2_boundary: number;
+};
+
+// The four boundaries, in ascending score order (score_5 first), for the
+// super_admin benchmark editor to iterate.
+export const STAMINA_BENCHMARK_BOUNDARIES = [
+  "score_5_boundary",
+  "score_4_boundary",
+  "score_3_boundary",
+  "score_2_boundary",
 ] as const;
-export type StaminaBenchmarkTier = (typeof STAMINA_BENCHMARK_TIERS)[number];
+export type StaminaBenchmarkBoundary = (typeof STAMINA_BENCHMARK_BOUNDARIES)[number];
 
-export type BenchmarkPoint = { value: number | null; level: number | null; shuttle: number | null };
-export type TestBenchmark = Partial<Record<StaminaBenchmarkTier, BenchmarkPoint>>;
-
-export type RawStaminaScore = { value: number } | { level: number; shuttle: number };
-
-// Compares two benchmark points directly — used to sanity-check that a
-// super_admin entered poor_ceiling <= average_low <= average_high <=
-// elite_floor for a given age band, since nothing at the DB level enforces
-// tier ordering.
-export function comparePoints(a: BenchmarkPoint, b: BenchmarkPoint): number {
-  if (a.value != null || b.value != null) return (a.value ?? 0) - (b.value ?? 0);
-  const aLevel = a.level ?? 0;
-  const bLevel = b.level ?? 0;
-  if (aLevel !== bLevel) return aLevel - bLevel;
-  return (a.shuttle ?? 0) - (b.shuttle ?? 0);
+// Direction is a fixed property of each Stamina test (seeded reference
+// data): Yo-Yo Intermittent records a completed level (higher is better);
+// RSA records a mean time (lower is better). The direction is stored
+// explicitly on each benchmark row (higher_is_better column), not inferred
+// from the unit string. This function is kept for reference but should not
+// be used for scoring — scoring uses the benchmark row's higher_is_better.
+export function isHigherIsBetter(unit: string): boolean {
+  return unit === "level";
 }
 
-function comparePoint(raw: RawStaminaScore, point: BenchmarkPoint): number {
-  const rawAsPoint: BenchmarkPoint =
-    "value" in raw
-      ? { value: raw.value, level: null, shuttle: null }
-      : { value: null, level: raw.level, shuttle: raw.shuttle };
-  return comparePoints(rawAsPoint, point);
+export function rateStaminaTest(value: number, benchmark: StaminaBenchmark): number {
+  if (benchmark.higher_is_better) {
+    if (value >= benchmark.score_5_boundary) return 5;
+    if (value >= benchmark.score_4_boundary) return 4;
+    if (value >= benchmark.score_3_boundary) return 3;
+    if (value >= benchmark.score_2_boundary) return 2;
+    return 1;
+  }
+  if (value <= benchmark.score_5_boundary) return 5;
+  if (value <= benchmark.score_4_boundary) return 4;
+  if (value <= benchmark.score_3_boundary) return 3;
+  if (value <= benchmark.score_2_boundary) return 2;
+  return 1;
 }
 
-// null when the benchmark for this test+age isn't fully configured yet
-// (all 4 tiers required) — callers treat that the same as "not recorded".
-export function rateStaminaTest(raw: RawStaminaScore, benchmark: TestBenchmark): number | null {
-  const { poor_ceiling, average_low, average_high, elite_floor } = benchmark;
-  if (!poor_ceiling || !average_low || !average_high || !elite_floor) return null;
+type StaminaAgeBand = {
+  id: string;
+  label?: string;
+  min_age: number;
+  max_age: number | null;
+  gender: string | null;
+};
 
-  if (comparePoint(raw, poor_ceiling) < 0) return 1;
-  if (comparePoint(raw, average_low) < 0) return 2;
-  if (comparePoint(raw, average_high) <= 0) return 3;
-  if (comparePoint(raw, elite_floor) <= 0) return 4;
-  return 5;
+function inRange(age: number, band: StaminaAgeBand): boolean {
+  return age >= band.min_age && (band.max_age == null || age <= band.max_age);
 }
 
-export function findAgeBand<T extends { min_age: number; max_age: number | null }>(
+// Gender-aware age-band lookup: "U-17 Girls" (gender = 'Female') overlaps
+// "U-17" by age, so a gender-specific band that matches both age and gender
+// wins; otherwise the gender-agnostic band for the age range applies.
+export function findStaminaAgeBand(
   age: number,
-  bands: T[]
-): T | undefined {
-  return bands.find((b) => age >= b.min_age && (b.max_age == null || age <= b.max_age));
+  gender: string | null,
+  bands: StaminaAgeBand[]
+): StaminaAgeBand | undefined {
+  const gendered = bands.find((b) => b.gender != null && b.gender === gender && inRange(age, b));
+  if (gendered) return gendered;
+  return bands.find((b) => b.gender == null && inRange(age, b));
 }
 
 type BenchmarkRow = {
   test_id: string;
   age_band_id: string;
-  tier: StaminaBenchmarkTier;
-  value: number | null;
-  level: number | null;
-  shuttle: number | null;
+  higher_is_better: boolean;
+  score_5_boundary: number;
+  score_4_boundary: number;
+  score_3_boundary: number;
+  score_2_boundary: number;
 };
 
-// Shared by every reader of five_s_stamina_benchmarks (scores.ts,
-// FiveSResultsView, the coach's stamina page) so the row -> nested-Map
-// shape lives in one place.
-export function groupStaminaBenchmarks(rows: BenchmarkRow[]): Map<string, Map<string, TestBenchmark>> {
-  const byTest = new Map<string, Map<string, TestBenchmark>>();
+// Shared by every reader of five_s_stamina_benchmarks (scores.ts, the
+// super_admin stamina page) so the row -> nested-Map shape lives in one place.
+export function groupStaminaBenchmarks(rows: BenchmarkRow[]): Map<string, Map<string, StaminaBenchmark>> {
+  const byTest = new Map<string, Map<string, StaminaBenchmark>>();
   for (const row of rows) {
     if (!byTest.has(row.test_id)) byTest.set(row.test_id, new Map());
-    const byAgeBand = byTest.get(row.test_id)!;
-    if (!byAgeBand.has(row.age_band_id)) byAgeBand.set(row.age_band_id, {});
-    byAgeBand.get(row.age_band_id)![row.tier] = { value: row.value, level: row.level, shuttle: row.shuttle };
+    byTest.get(row.test_id)!.set(row.age_band_id, {
+      higher_is_better: row.higher_is_better,
+      score_5_boundary: row.score_5_boundary,
+      score_4_boundary: row.score_4_boundary,
+      score_3_boundary: row.score_3_boundary,
+      score_2_boundary: row.score_2_boundary,
+    });
   }
   return byTest;
 }
 
 type StaminaTestLike = { id: string; unit: string };
-type StaminaResultLike = { score: number | null; level: number | null; shuttle: number | null };
-type AgeBandLike = { id: string; min_age: number; max_age: number | null };
+type StaminaResultLike = { score: number | null };
+type StaminaAgeBandLike = { id: string; min_age: number; max_age: number | null; gender: string | null };
 
 // Averages both Stamina tests' 1-5 ratings; returns null unless every test
-// has both a recorded result and a configured benchmark (product decision:
-// no partial Stamina score until Beep Test and Cooper Test are both in).
+// has both a recorded result and a configured benchmark for the player's
+// age band (both tests are required for a valid Stamina category score).
 export function computeStaminaCategoryScore(
   playerAge: number,
+  playerGender: string | null,
   staminaTests: StaminaTestLike[],
   resultByTest: Map<string, StaminaResultLike>,
-  ageBands: AgeBandLike[],
-  benchmarksByTest: Map<string, Map<string, TestBenchmark>>
+  ageBands: StaminaAgeBandLike[],
+  benchmarksByTest: Map<string, Map<string, StaminaBenchmark>>
 ): number | null {
   if (staminaTests.length === 0) return null;
 
-  const band = findAgeBand(playerAge, ageBands);
+  const band = findStaminaAgeBand(playerAge, playerGender, ageBands);
   if (!band) return null;
 
   const ratings: number[] = [];
   for (const test of staminaTests) {
     const result = resultByTest.get(test.id);
-    if (!result) return null;
-
-    const raw: RawStaminaScore | null =
-      test.unit === "level"
-        ? result.level != null && result.shuttle != null
-          ? { level: result.level, shuttle: result.shuttle }
-          : null
-        : result.score != null
-          ? { value: result.score }
-          : null;
-    if (!raw) return null;
+    if (!result || result.score == null) return null;
 
     const benchmark = benchmarksByTest.get(test.id)?.get(band.id);
     if (!benchmark) return null;
 
-    const rating = rateStaminaTest(raw, benchmark);
-    if (rating == null) return null;
-    ratings.push(rating);
+    ratings.push(rateStaminaTest(result.score, benchmark));
   }
 
   return ratings.reduce((a, b) => a + b, 0) / ratings.length;

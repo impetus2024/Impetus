@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
 import { resolveDocumentLinks } from "@/lib/storage/resolve-document-links";
+import { documentUrl } from "@/lib/storage/document-link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { InjuryReportsTable } from "@/components/injuries/injury-reports-table";
@@ -180,7 +181,7 @@ export default async function PlayerDetailPage({
             batchName={player.batches?.name ?? null}
             playerTypeName={player.player_types?.name ?? null}
             isActive={player.is_active}
-            profilePictureUrl={documentLinks.profilePicture}
+            profilePictureUrl={documentUrl(documentLinks.profilePicture)}
           />
           <Card className="rounded-2xl border-border/50 py-3 shadow-soft">
             <CardContent className="px-3">
