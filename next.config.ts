@@ -36,8 +36,22 @@ function buildCsp() {
   // entry doesn't match that origin at all. The leading `*.` wildcard covers
   // any bucket under this account (R2_BUCKET_NAME, R2_PRIVATE_BUCKET_NAME,
   // or any added later) without hard-coding bucket names into the CSP.
+  // The bare account host is allowed too: a CSP `*.` wildcard never matches
+  // the bare host, and path-style URLs (bucket in the path) are served from it.
   if (process.env.R2_ACCOUNT_ID) {
-    imgSrc.push(`https://*.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);
+    imgSrc.push(
+      `https://*.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+    );
+  }
+  // When R2_ENDPOINT is set, getClient() switches to path-style addressing,
+  // so signed URLs are served from that endpoint's origin exactly.
+  if (process.env.R2_ENDPOINT) {
+    try {
+      imgSrc.push(new URL(process.env.R2_ENDPOINT).origin);
+    } catch {
+      // malformed env var — ignore rather than crash the build over it
+    }
   }
 
   return [
@@ -52,7 +66,7 @@ function buildCsp() {
     // reporting endpoint in connect-src, so it isn't CSP-blocked.
     `script-src ${scriptSrc.join(" ")}`,
     `style-src 'self' 'unsafe-inline'`,
-    `img-src ${imgSrc.join(" ")}`,
+    `img-src ${[...new Set(imgSrc)].join(" ")}`,
     `font-src 'self'`,
     `connect-src ${connectSrc.join(" ")}`,
     `object-src 'none'`,
