@@ -128,7 +128,7 @@ export type Database = {
           centre_id: string
           created_at: string
           end_time: string
-          head_coach_id: string
+          head_coach_id: string | null
           id: string
           is_active: boolean
           name: string
@@ -142,7 +142,7 @@ export type Database = {
           centre_id: string
           created_at?: string
           end_time: string
-          head_coach_id: string
+          head_coach_id?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -156,7 +156,7 @@ export type Database = {
           centre_id?: string
           created_at?: string
           end_time?: string
-          head_coach_id?: string
+          head_coach_id?: string | null
           id?: string
           is_active?: boolean
           name?: string

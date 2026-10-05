@@ -32,6 +32,16 @@ export function ParentProfileForm({
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const [isEditing, setIsEditing] = useState(false);
+  // The email is the parent's login, so it stays read-only (which also keeps
+  // browser autofill out of it) until the admin explicitly asks to change it.
+  // Only then is parentEmailChange submitted, and updateParentProfile ignores
+  // the email field entirely without it.
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+
+  function closeEditor() {
+    setIsEditing(false);
+    setIsChangingEmail(false);
+  }
 
   // Return to view mode once a save completes successfully. Adjusted during
   // render (not an effect, and not a ref — both reading a ref during render
@@ -41,7 +51,7 @@ export function ParentProfileForm({
   if (pending !== prevPending) {
     setPrevPending(pending);
     if (prevPending && !pending && !state?.error) {
-      setIsEditing(false);
+      closeEditor();
     }
   }
 
@@ -65,7 +75,7 @@ export function ParentProfileForm({
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="updatedAt" value={defaultValues.updatedAt ?? ""} />
       <div className="flex justify-end">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+        <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
           Cancel
         </Button>
       </div>
@@ -86,9 +96,24 @@ export function ParentProfileForm({
             name="parentEmail"
             type="email"
             required
+            autoComplete="off"
+            readOnly={!isChangingEmail}
             defaultValue={defaultValues.parentEmail}
             className={FILLED_INPUT}
           />
+          {isChangingEmail ? (
+            <input type="hidden" name="parentEmailChange" value="1" />
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              onClick={() => setIsChangingEmail(true)}
+            >
+              Change email
+            </Button>
+          )}
           <FieldDescription>
             This is the parent&apos;s login — changing it updates their sign-in email immediately.
           </FieldDescription>

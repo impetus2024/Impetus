@@ -82,6 +82,12 @@ export async function loginAs(page: Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(TEST_PASSWORD!);
   await page.getByRole("button", { name: /sign in/i }).click();
+  // `next dev` compiles the login Server Action on its first submission, which
+  // can take longer than the assertion timeouts the specs use immediately
+  // after signing in. Wait for the redirect out of /login here — generously —
+  // so callers assert against a page that has already navigated instead of
+  // racing the first compile.
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 60_000 });
 }
 
 // A minimal valid 1x1 PNG — passes r2.ts's magic-byte sniffing for

@@ -40,6 +40,8 @@ test.describe("core workflows", () => {
       await page.getByLabel("Name").fill("E2E Test Coach");
       await page.getByLabel("Email ID").fill(email);
       await page.getByLabel("Contact Number").fill("9999999999");
+      await page.getByLabel("Role").click();
+      await page.getByRole("option", { name: "Coach" }).click();
       await page.getByLabel("Upload Profile Picture").setInputFiles({
         name: "avatar.png",
         mimeType: "image/png",
@@ -50,9 +52,9 @@ test.describe("core workflows", () => {
       await expect(page.getByText(email)).toBeVisible();
     });
 
-    test("record a gate pass entry for a seeded player", async ({ page }) => {
+    test("record a movement pass entry for a seeded player", async ({ page }) => {
       await page.goto("/centre-admin/gate-pass");
-      await page.getByRole("button", { name: "Add Gate Pass" }).click();
+      await page.getByRole("button", { name: "Add Movement Pass" }).click();
 
       await page.getByLabel("Select Player").click();
       await page.getByRole("option", { name: /Arjun Mehta/ }).click();
@@ -68,8 +70,10 @@ test.describe("core workflows", () => {
     await expect(page).toHaveURL(/\/coach/);
 
     await page.goto("/coach/attendance");
-    await page.getByRole("link", { name: "Add Attendance" }).first().click();
-    await expect(page).toHaveURL(/\/coach\/attendance\/.+/);
+    await page.getByRole("button", { name: "Add Attendance" }).first().click();
+    // The batch detail route compiles on first request under `next dev`, which
+    // can take longer than the default assertion timeout on a cold server.
+    await expect(page).toHaveURL(/\/coach\/attendance\/.+/, { timeout: 30_000 });
 
     await page.getByRole("button", { name: "Present" }).first().click();
     await page.getByRole("button", { name: "Save Attendance" }).click();

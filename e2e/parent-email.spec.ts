@@ -1,4 +1,5 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import {
   TEST_ACCOUNTS,
   TEST_PASSWORD,
@@ -16,7 +17,9 @@ assertSafeE2ETarget();
 // parent's login, and updateParentProfile must only move that login when the
 // admin explicitly edits the field — never while saving unrelated profile
 // fields, and never by "healing" a denormalized copy that has drifted from
-// the real login. Runs serially against throwaway parents/players so the
+// the real login. players.parent_email itself changes only on the player whose
+// Parent Profile was explicitly edited: never on a sibling, never through a
+// direct Data API write, and never from a Supabase Auth email change. Runs serially against throwaway parents/players so the
 // seeded TEST_ACCOUNTS (and each other) are never touched.
 test.describe.configure({ mode: "serial" });
 
@@ -57,6 +60,10 @@ test.describe("parent login email safety", () => {
 
   let caseParentId: string;
   let casePlayerId: string;
+
+  // Throwaway row for the DELETE + re-INSERT regression test; deleted there,
+  // and swept by cleanupFixtures in case that test dies mid-sequence.
+  let reinsertFixtureId = "";
 
   const admin = () => adminClient();
 
@@ -139,6 +146,27 @@ test.describe("parent login email safety", () => {
     await page.getByRole("button", { name: "Edit" }).click();
   }
 
+  // The email field is read-only until "Change email" is clicked; only then
+  // does the save carry the explicit change intent.
+  async function changeParentEmail(page: Page, email: string) {
+    await page.getByRole("button", { name: "Change email" }).click();
+    await page.getByLabel("Parent / Guardian Email ID").fill(email);
+  }
+
+  // A Data API client holding the centre admin's own session — the requests
+  // a hand-rolled client could send without going through the app.
+  async function centreAdminDataClient() {
+    const authed = createSupabaseClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { error } = await authed.auth.signInWithPassword({
+      email: TEST_ACCOUNTS.centreAdmin,
+      password: TEST_PASSWORD!,
+    });
+    expect(error).toBeNull();
+    return authed;
+  }
+
   // Best-effort teardown, in FK-safe order. Each step is independently
   // guarded so one failure can't strand the rest, and it is also called from
   // the beforeAll catch below so a partially-seeded fixture still gets cleaned.
@@ -165,6 +193,9 @@ test.describe("parent login email safety", () => {
     });
     await safeDelete(async () => {
       if (playerId) await db.from("players").delete().eq("id", playerId);
+    });
+    await safeDelete(async () => {
+      if (reinsertFixtureId) await db.from("players").delete().eq("id", reinsertFixtureId);
     });
     await safeDelete(async () => {
       if (parentId) await db.auth.admin.deleteUser(parentId);
@@ -347,10 +378,126 @@ test.describe("parent login email safety", () => {
     expect(await emailChangedLogsFor(parentId)).toEqual([]);
   });
 
+  test("an email value submitted without an explicit change is ignored", async ({ page }) => {
+    await signInAsCentreAdmin(page);
+    await openParentEditor(page, playerId);
+    // What browser autofill (or a hand-edited DOM) would do: put a different
+    // address in the read-only field without the admin clicking "Change email".
+    await page.evaluate(() => {
+      const input = document.querySelector('input[name="parentEmail"]') as HTMLInputElement | null;
+      if (input) input.value = "autofilled-admin@impetus.local";
+    });
+    await page.getByLabel("City").fill("Pune");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    expect((await admin().from("players").select("city").eq("id", playerId).single()).data?.city).toBe("Pune");
+    expect(await playerParentEmail(playerId)).toBe(parentOriginalEmail);
+    expect(await authEmailOf(parentId)).toBe(parentOriginalEmail);
+    expect(await emailChangedLogsFor(parentId)).toEqual([]);
+  });
+
+  test("a centre admin cannot change parent_email through the Data API, but other fields still save", async () => {
+    const authed = await centreAdminDataClient();
+
+    const { error } = await authed
+      .from("players")
+      .update({ parent_email: `bypass-${stamp}@impetus.local` })
+      .eq("id", siblingId);
+    // Raised by prevent_parent_email_tamper, not silently filtered by RLS.
+    expect(error).not.toBeNull();
+    expect(error?.message ?? "").toMatch(/can only be changed from the Parent Profile/i);
+    expect(await playerParentEmail(siblingId)).toBe(parentOriginalEmail);
+
+    // Ordinary player updates through the same policy are unaffected.
+    const { data: saved, error: cityError } = await authed
+      .from("players")
+      .update({ city: "Nashik" })
+      .eq("id", siblingId)
+      .select("city, parent_email")
+      .single();
+    expect(cityError).toBeNull();
+    expect(saved).toEqual({ city: "Nashik", parent_email: parentOriginalEmail });
+  });
+
+  // Regression: prevent_parent_email_tamper guards UPDATE only, so the
+  // previously identified bypass re-IMPLEMENTED the row instead of updating
+  // it — DELETE the player, re-INSERT the same primary key with an arbitrary
+  // parent_email, and the email changed in place without ever touching an
+  // UPDATE trigger, the intent flag, or the version check. The supplied id is
+  // the entire trick, so the database now refuses any client-supplied
+  // players.id from an authenticated end-user (see migration
+  // 20261004000000_prevent_player_id_reinsert.sql). This runs against the
+  // real local Data API with the centre admin's own session — the exact
+  // client a hand-rolled attack would use, no mocked database.
+  test("a centre admin cannot change parent_email by DELETE + re-INSERT with the same id", async () => {
+    const authed = await centreAdminDataClient();
+    const forgedEmail = `bypass-reinsert-${stamp}@impetus.local`;
+
+    // Seed a throwaway row with the service role so both halves of the attack
+    // below are issued by the end-user client alone.
+    const { data: seeded, error: seedError } = await admin()
+      .from("players")
+      .insert({
+        centre_id: centreId,
+        name: `E2E Reinsert Throwaway ${stamp}`,
+        date_of_birth: "2014-05-05",
+        parent_email: parentOriginalEmail,
+        created_by: centreAdminId,
+      })
+      .select("id")
+      .single();
+    expect(seedError).toBeNull();
+    reinsertFixtureId = seeded!.id;
+
+    // Step 1 of the bypass: the delete half still goes through — RLS is FOR
+    // ALL for this centre's rows and deletion itself is not what's blocked.
+    const { error: deleteError } = await authed.from("players").delete().eq("id", reinsertFixtureId);
+    expect(deleteError).toBeNull();
+
+    // Step 2: re-inserting that SAME id with a different parent_email must be
+    // refused outright — no row, no in-place email rewrite.
+    const { error: reinsertError } = await authed.from("players").insert({
+      id: reinsertFixtureId,
+      centre_id: centreId,
+      name: `E2E Reinsert Throwaway ${stamp}`,
+      date_of_birth: "2014-05-05",
+      parent_email: forgedEmail,
+      created_by: centreAdminId,
+    });
+    expect(reinsertError).not.toBeNull();
+    expect(reinsertError?.message ?? "").toMatch(/cannot be supplied on insert/i);
+
+    // The id stayed dead and the forged address exists nowhere in the table.
+    expect((await admin().from("players").select("id").eq("id", reinsertFixtureId)).data ?? []).toEqual([]);
+    expect((await admin().from("players").select("id").eq("parent_email", forgedEmail)).data ?? []).toEqual([]);
+
+    // Legitimate creation is untouched: the same centre admin inserting with
+    // NO supplied id — exactly what createPlayer does — still succeeds…
+    const { data: fresh, error: freshError } = await authed
+      .from("players")
+      .insert({
+        centre_id: centreId,
+        name: `E2E Fresh Player ${stamp}`,
+        date_of_birth: "2014-05-06",
+        parent_email: parentOriginalEmail,
+        created_by: centreAdminId,
+      })
+      .select("id")
+      .single();
+    expect(freshError).toBeNull();
+    expect(fresh!.id).toBeTruthy();
+
+    // …and so does deleting that fresh row: the fix blocks id re-use, not
+    // player deletion itself.
+    const { error: freshDeleteError } = await authed.from("players").delete().eq("id", fresh!.id);
+    expect(freshDeleteError).toBeNull();
+  });
+
   test("a case-only edit of the parent email is not an email change", async ({ page }) => {
     await signInAsCentreAdmin(page);
     await openParentEditor(page, playerId);
-    await page.getByLabel("Parent / Guardian Email ID").fill(parentOriginalEmail.toUpperCase());
+    await changeParentEmail(page, parentOriginalEmail.toUpperCase());
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
@@ -389,7 +536,7 @@ test.describe("parent login email safety", () => {
     expect((await admin().from("players").select("city").eq("id", playerId).single()).data?.city).toBe("Pune");
   });
 
-  test("an intentional email change moves the login, revokes sessions, and syncs only this centre's siblings", async ({
+  test("an intentional email change moves the login, revokes sessions, and changes only this player", async ({
     page,
     browser,
   }) => {
@@ -397,15 +544,16 @@ test.describe("parent login email safety", () => {
 
     await signInAsCentreAdmin(page);
     await openParentEditor(page, playerId);
-    await page.getByLabel("Parent / Guardian Email ID").fill(parentChangedEmail);
+    await changeParentEmail(page, parentChangedEmail);
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect.poll(async () => (await profileOf(parentId)).email).toBe(parentChangedEmail);
     expect(await authEmailOf(parentId)).toBe(parentChangedEmail);
 
-    // Same-centre sibling synced; the other centre's player is untouched.
+    // Only the edited player's copy changed — no sibling, in this centre or
+    // another, is touched by saving this Parent Profile.
     expect(await playerParentEmail(playerId)).toBe(parentChangedEmail);
-    expect(await playerParentEmail(siblingId)).toBe(parentChangedEmail);
+    expect(await playerParentEmail(siblingId)).toBe(parentOriginalEmail);
     expect(await playerParentEmail(otherCentrePlayerId)).toBe(parentOriginalEmail);
 
     // The email-changed notice went to the new address only.
@@ -428,7 +576,7 @@ test.describe("parent login email safety", () => {
 
     await signInAsCentreAdmin(page);
     await openParentEditor(page, playerId);
-    await page.getByLabel("Parent / Guardian Email ID").fill(parentChangedEmail);
+    await changeParentEmail(page, parentChangedEmail);
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
@@ -478,7 +626,7 @@ test.describe("parent login email safety", () => {
     await openParentEditor(page, divPlayerId);
     // Submitted address equals the linked parent's actual login (divParentEmail)
     // but differs from the stale denormalized copy — a repair, not a change.
-    await page.getByLabel("Parent / Guardian Email ID").fill(divParentEmail);
+    await changeParentEmail(page, divParentEmail);
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
@@ -496,7 +644,7 @@ test.describe("parent login email safety", () => {
     await signInAsCentreAdmin(page);
     // Fresh page load so the form carries the current updated_at.
     await openParentEditor(page, divPlayerId);
-    await page.getByLabel("Parent / Guardian Email ID").fill(divParentNewEmail);
+    await changeParentEmail(page, divParentNewEmail);
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect.poll(async () => (await profileOf(divParentId)).email).toBe(divParentNewEmail);
@@ -537,6 +685,9 @@ test.describe("parent login email safety", () => {
 
     const parentSession = await parentPage(browser, newerEmail, parentPassword);
 
+    // The stale form explicitly submits the address it was loaded with — the
+    // exact request that would revert the newer login if it got through.
+    await page.getByRole("button", { name: "Change email" }).click();
     if (unrelatedEdit) await page.getByLabel("City").fill(unrelatedEdit.city);
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText(/changed by someone else/i)).toBeVisible();
@@ -569,13 +720,14 @@ test.describe("parent login email safety", () => {
 
     await signInAsCentreAdmin(page);
     await openParentEditor(page, playerId);
-    await page.getByLabel("Parent / Guardian Email ID").fill(parentFinalEmail);
+    await changeParentEmail(page, parentFinalEmail);
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect.poll(async () => (await profileOf(parentId)).email).toBe(parentFinalEmail);
     expect(await authEmailOf(parentId)).toBe(parentFinalEmail);
     expect(await playerParentEmail(playerId)).toBe(parentFinalEmail);
-    expect(await playerParentEmail(siblingId)).toBe(parentFinalEmail);
+    // The sibling keeps the value it already had.
+    expect(await playerParentEmail(siblingId)).toBe(raceEmailTwo);
     expect(await sessionStillValid(parentSession)).toBe(false);
     await parentSession.context().close();
   });
@@ -603,5 +755,19 @@ test.describe("parent login email safety", () => {
       .eq("email", caseParentEmail)
       .eq("role", "parent");
     expect(parents?.length).toBe(1);
+  });
+
+  test("a Supabase Auth email change does not change players.parent_email", async () => {
+    const movedEmail = `caseparent-moved-${stamp}@impetus.local`;
+    const { error } = await admin().auth.admin.updateUserById(caseParentId, {
+      email: movedEmail,
+      email_confirm: true,
+    });
+    expect(error).toBeNull();
+
+    // profiles.email still mirrors the login (handle_auth_user_sync)...
+    await expect.poll(async () => (await profileOf(caseParentId)).email).toBe(movedEmail);
+    // ...but the player's parent email is the app's own field and stays put.
+    expect(await playerParentEmail(casePlayerId)).toBe(casePlayerMixedEmail);
   });
 });

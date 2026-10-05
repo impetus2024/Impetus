@@ -133,7 +133,7 @@ export default async function BatchesPage({
           {batches?.map((batch) => (
             <TableRow key={batch.id}>
               <TableCell>{batch.name}</TableCell>
-              <TableCell>{batch.profiles?.full_name}</TableCell>
+              <TableCell>{batch.profiles?.full_name ?? "—"}</TableCell>
               <TableCell>{batch.assistant_coach?.full_name ?? "—"}</TableCell>
               <TableCell>{batch.player_types?.name ?? "—"}</TableCell>
               <TableCell>{batch.age_categories?.name}</TableCell>

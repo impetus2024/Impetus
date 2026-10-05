@@ -26,7 +26,22 @@ import { absoluteUrl } from "@/lib/url";
 import { logError, logWarning } from "@/lib/logger";
 import type { Database } from "@/lib/supabase/database.types";
 
-type PlayerInsert = Database["public"]["Tables"]["players"]["Insert"];
+// players.id has had no column default since migration
+// 20261004000000_prevent_player_id_reinsert: the value is produced by that
+// migration's BEFORE INSERT trigger, and an authenticated caller that supplies
+// one is rejected outright. A fresh `supabase gen types` run therefore reports
+// players.Insert.id as REQUIRED (`id: string`), which is the opposite of how a
+// player may legitimately be created here — createPlayer must always omit id
+// and let the database assign it, and there is no id this app is allowed to
+// pass.
+//
+// So the application's insert contract is the generated Insert with "id"
+// removed, declared once here rather than inherited from a column whose
+// optionality the generator derives from a default that no longer exists.
+// Keeping it as an Omit (instead of relying on `id?`) keeps
+// `const insert: PlayerInsert = { ... }` correct even if database.types.ts is
+// regenerated. Never add an id to this payload.
+type PlayerInsert = Omit<Database["public"]["Tables"]["players"]["Insert"], "id">;
 type PlayerUpdate = Database["public"]["Tables"]["players"]["Update"];
 
 const PATH = "/centre-admin/players";
@@ -838,7 +853,9 @@ export async function updatePlayerProfile(
 const ParentProfileSchema = z.object({
   fatherName: z.string().optional(),
   motherName: z.string().optional(),
-  parentEmail: z.email({ error: "Enter a valid parent/guardian email." }),
+  // Only present when the admin explicitly asked to change the email (see
+  // updateParentProfile); otherwise the stored address is left alone.
+  parentEmail: z.email({ error: "Enter a valid parent/guardian email." }).optional(),
   parentContactNumber: z.string().optional(),
   addressLine1: z.string().optional(),
   addressLine2: z.string().optional(),
@@ -855,10 +872,15 @@ export async function updateParentProfile(
   formData: FormData
 ): Promise<PlayerFormState> {
   const centreAdmin = await requireRole("centre_admin");
+  // The email field is read-only until the admin clicks "Change email", which
+  // also submits this flag. Without it the submitted email is ignored
+  // entirely, so a stale, autofilled or hand-edited value can never be
+  // written to players.parent_email or move the parent's login.
+  const emailChangeRequested = formData.get("parentEmailChange") === "1";
   const parsed = ParentProfileSchema.safeParse({
     fatherName: optionalStr(formData.get("fatherName")),
     motherName: optionalStr(formData.get("motherName")),
-    parentEmail: formData.get("parentEmail"),
+    parentEmail: emailChangeRequested ? formData.get("parentEmail") : undefined,
     parentContactNumber: optionalStr(formData.get("parentContactNumber")),
     addressLine1: optionalStr(formData.get("addressLine1")),
     addressLine2: optionalStr(formData.get("addressLine2")),
@@ -916,12 +938,11 @@ export async function updateParentProfile(
 
   // The email doubles as the parent's login, so changing it here must also
   // change their actual auth.users email (handle_auth_user_sync then syncs
-  // it into profiles.email) -- not just this denormalized column. Sibling
-  // players in this centre have their parent_email kept in sync too, since
-  // resolveParentProfileId below looks accounts up by email: a stale copy
-  // left on another child would stop matching the parent's new email and
-  // provision a duplicate account for them. The sync never crosses centre
-  // boundaries — another centre's players are that centre's to edit.
+  // it into profiles.email) -- not just this denormalized column. Only THIS
+  // player's parent_email is written: siblings linked to the same parent keep
+  // their own value until an admin edits each one on its own Parent Profile.
+  // Their links already exist, so a sibling's differing copy is reported as
+  // divergence on its next save rather than provisioning a duplicate account.
   //
   // parent_player_links' primary key is (parent_id, player_id), so a player can
   // legitimately have more than one parent: this has to be a list read. With
@@ -947,27 +968,34 @@ export async function updateParentProfile(
   // guessed at. GoTrue lowercases auth.users.email (profiles.email mirrors it)
   // while players.parent_email keeps the address exactly as entered, so these
   // comparisons are case-insensitive: a case-only difference is not an email
-  // change and must not re-issue the auth update or the sibling sync.
+  // change and must not re-issue the auth update or rewrite the column.
   const emailsEqual = (a: string | null | undefined, b: string | null | undefined) =>
     a?.toLowerCase() === b?.toLowerCase();
   const parentLinks = links ?? [];
   const link =
     parentLinks.length === 1
       ? parentLinks[0]
-      : (parentLinks.find((l) => emailsEqual(l.profiles?.email, d.parentEmail)) ??
+      : ((d.parentEmail !== undefined
+          ? parentLinks.find((l) => emailsEqual(l.profiles?.email, d.parentEmail))
+          : undefined) ??
          parentLinks.find((l) => emailsEqual(l.profiles?.email, existing.parent_email)) ??
          null);
 
-  // An email change is only ever the admin editing this field to a value that
-  // differs from what the form was displaying (players.parent_email). The
-  // submitted address is NOT compared against the linked login email here:
-  // players.parent_email can lag behind profiles.email (a sibling sync that
-  // failed after the auth email moved, an out-of-band change), and re-asserting
-  // the stale displayed value as the login would silently move the parent's
-  // sign-in address on an unrelated profile save. Divergence is surfaced to
-  // the administrator below instead of being "healed" by guessing.
+  // An email change is only ever the admin explicitly asking to change this
+  // field (emailChangeRequested) to a value that differs from what the form
+  // was displaying (players.parent_email). The submitted address is NOT
+  // compared against the linked login email here: players.parent_email can lag
+  // behind profiles.email (a sibling the admin hasn't edited yet, a login
+  // changed through Supabase Auth), and re-asserting the stale displayed value
+  // as the login would silently move the parent's sign-in address on an
+  // unrelated profile save. Divergence is surfaced to the administrator below
+  // instead of being "healed" by guessing.
   const linkedParentEmail = link?.profiles?.email ?? null;
-  const emailChanging = !emailsEqual(existing.parent_email, d.parentEmail);
+  const newParentEmail =
+    d.parentEmail !== undefined && !emailsEqual(existing.parent_email, d.parentEmail)
+      ? d.parentEmail
+      : null;
+  const emailChanging = newParentEmail !== null;
   const loginEmailDiverged =
     linkedParentEmail != null && !emailsEqual(existing.parent_email, linkedParentEmail);
 
@@ -991,42 +1019,20 @@ export async function updateParentProfile(
   // ordinary profile save from emailing anyone.
   let emailChangeNotice: { parentId: string; previousEmail: string } | null = null;
 
-  let siblingIds: string[] = [];
-
-  if (emailChanging && link) {
-    // Read the sibling links before any auth write, scoped to this centre: a
-    // failed read must not leave the login moved while siblings keep stale
-    // copies, and a centre admin must not rewrite another centre's players
-    // through this flow.
-    const { data: siblingLinks, error: siblingLinksError } = await admin
-      .from("parent_player_links")
-      .select("player_id")
-      .eq("parent_id", link.parent_id)
-      .eq("centre_id", centreAdmin.centre_id!);
-
-    if (siblingLinksError) {
-      logError(`Failed to load sibling links for parent ${link.parent_id} (player ${id}):`, siblingLinksError);
-      return { error: "Failed to update the parent's login email." };
-    }
-
-    siblingIds = (siblingLinks ?? [])
-      .map((l) => l.player_id)
-      .filter((playerId) => playerId !== id);
-  }
-
   // When the submitted address differs from the denormalized copy but equals
   // the linked parent's real login email, the login already holds it — this is
   // a copy repair (e.g. a retry after a previous save moved the auth email but
-  // left the copies stale). Moving the login to the address it already has
-  // would still revoke the parent's sessions and email them, so repair the
-  // copies instead and leave auth.users.email untouched.
+  // left this copy stale, or a sibling being brought in line by hand). Moving
+  // the login to the address it already has would still revoke the parent's
+  // sessions and email them, so repair this player's copy instead and leave
+  // auth.users.email untouched.
   //
-  // Note on partial failure: the auth move and these denormalized copies are
-  // separate stores with no cross-store transaction, so a sibling/player write
-  // can still fail after the login has moved. Copy repair is what makes the
-  // retry safe — re-submitting the same address no longer revokes sessions or
+  // Note on partial failure: the auth move and this denormalized copy are
+  // separate stores with no cross-store transaction, so the player write can
+  // still fail after the login has moved. Copy repair is what makes the retry
+  // safe — re-submitting the same address no longer revokes sessions or
   // re-sends the notification.
-  const copyRepair = emailChanging && link != null && emailsEqual(d.parentEmail, linkedParentEmail);
+  const copyRepair = emailChanging && link != null && emailsEqual(newParentEmail, linkedParentEmail);
 
   // A duplicate address is rejected before anything is claimed or written, so
   // the common failure leaves the form's version token valid for a retry.
@@ -1034,7 +1040,7 @@ export async function updateParentProfile(
     emailChanging &&
     link &&
     !copyRepair &&
-    (await loginEmailInUse(d.parentEmail, link.parent_id))
+    (await loginEmailInUse(newParentEmail, link.parent_id))
   ) {
     return { error: EMAIL_IN_USE_MESSAGE };
   }
@@ -1042,14 +1048,15 @@ export async function updateParentProfile(
   // The version this request must still match at the final write below.
   let expectedVersion = d.updatedAt;
 
-  // Claim the row BEFORE any auth/sibling side effect. Everything above is
-  // read-only; from here on the login and the sibling copies can move, and
-  // neither store can be rolled back. The compare-and-swap on updated_at is
-  // the authoritative stale check: it matches only if nobody has written this
-  // player since the form loaded, and a no-op write is enough because
-  // set_updated_at bumps the version on every UPDATE. A stale form matches zero
-  // rows here and returns without touching auth.users, profiles.email, the
-  // sessions or the siblings -- so it can never re-assert the email it was
+  // Claim the row BEFORE any auth side effect. Everything above is read-only;
+  // from here on the login can move, and that cannot be rolled back. The
+  // compare-and-swap on updated_at is the authoritative stale check: it
+  // matches only if nobody has written this player since the form loaded, and
+  // a no-op write is enough because set_updated_at bumps the version on every
+  // UPDATE (rewriting parent_email to its current value is also what keeps
+  // prevent_parent_email_tamper satisfied). A stale form matches zero rows here
+  // and returns without touching auth.users, profiles.email or the
+  // sessions -- so it can never re-assert the email it was
   // loaded with. Because the row cannot have changed since the form loaded,
   // the `existing.parent_email` read above is exactly what the form displayed,
   // which is what makes `emailChanging` a statement of the admin's intent.
@@ -1084,7 +1091,7 @@ export async function updateParentProfile(
     // Shared with the coach email change (see changeLoginEmail): updates
     // auth.users, maps a duplicate address to EMAIL_IN_USE_MESSAGE, and
     // revokes the parent's existing sessions once the email has moved.
-    const emailResult = await changeLoginEmail(link.parent_id, d.parentEmail);
+    const emailResult = await changeLoginEmail(link.parent_id, newParentEmail);
     if (emailResult !== "ok") {
       return failAfterClaim(
         emailResult === "email_in_use"
@@ -1097,7 +1104,7 @@ export async function updateParentProfile(
     // moved from, for the de-duplication key below. players.parent_email is
     // the right side of that pair rather than profiles.email: it is what
     // this form was displaying and it is only written once everything below
-    // has succeeded, so a re-submit after a failed sibling sync still
+    // has succeeded, so a re-submit after a failed player write still
     // produces the same key and still sends exactly one notification.
     emailChangeNotice = {
       parentId: link.parent_id,
@@ -1105,25 +1112,12 @@ export async function updateParentProfile(
     };
   }
 
-  if (emailChanging && link && siblingIds.length) {
-    const { error: siblingUpdateError } = await admin
-      .from("players")
-      .update({ parent_email: d.parentEmail })
-      .in("id", siblingIds)
-      .eq("centre_id", centreAdmin.centre_id!);
-    if (siblingUpdateError) {
-      logError(
-        `Failed to sync parent_email to sibling players ${siblingIds.join(", ")} for parent ${link.parent_id}:`,
-        siblingUpdateError
-      );
-      return failAfterClaim("Failed to update the parent's login email.");
-    }
-  }
-
+  // parent_email is part of the write only for an intentional change. Any
+  // other save leaves the stored value exactly as it is.
   const update: PlayerUpdate = {
     father_name: d.fatherName ?? null,
     mother_name: d.motherName ?? null,
-    parent_email: d.parentEmail,
+    ...(newParentEmail !== null && { parent_email: newParentEmail }),
     parent_contact_number: parentContactNumber,
     address_line1: d.addressLine1 ?? null,
     address_line2: d.addressLine2 ?? null,
@@ -1136,7 +1130,23 @@ export async function updateParentProfile(
   // Optimistic concurrency: the form submits the players.updated_at it was
   // loaded with, so a stale save matches zero rows instead of overwriting a
   // newer one. No schema change — the column and its trigger already exist.
-  const { data: player, error } = await supabase
+  //
+  // prevent_parent_email_tamper rejects parent_email changes from any
+  // end-user JWT, so an intentional change is written with the service-role
+  // client. It is scoped exactly as RLS would scope it: this centre admin's
+  // centre (requireRole above), this player, and the version this request
+  // claimed. Every other save stays on the RLS-bound client.
+  //
+  // This is the application's one sanctioned service-role writer of
+  // players.parent_email: createAdminClient's guard throws on that column
+  // unless the client opts in with { allowParentEmailWrite: true }, so any
+  // future server-side write elsewhere fails loudly instead of silently
+  // bypassing the intent flag, the centre scoping and the version check
+  // above. The opt-in is only ever requested here, and only when this save
+  // actually carries an intentional change.
+  const { data: player, error } = await (
+    emailChanging ? createAdminClient({ allowParentEmailWrite: true }) : supabase
+  )
     .from("players")
     .update(update)
     .eq("id", id)
@@ -1194,7 +1204,7 @@ export async function updateParentProfile(
   // single-use recovery link, not something this app minted.
   let emailChangeNotified = true;
   if (emailChangeNotice) {
-    const newEmail = player?.parent_email ?? d.parentEmail;
+    const newEmail = player.parent_email;
     try {
       await sendLoginEmailChangedNotice({
         userId: emailChangeNotice.parentId,

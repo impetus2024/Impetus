@@ -16,19 +16,39 @@ export function BatchRowActions({
   batch: {
     id: string;
     name: string;
-    head_coach_id: string;
+    // Nullable since migration 20261005000000: a batch can outlive its coach
+    // (cleared from Edit Batch) and shows as unassigned until one is picked.
+    head_coach_id: string | null;
     assistant_coach_id: string | null;
     player_type_id: string | null;
     age_category_id: string;
     start_time: string;
     end_time: string;
     is_active: boolean;
+    // The assigned coaches as the list query resolved them, so a coach who is
+    // no longer in the active-coach list still shows up by name (see below).
+    profiles: { full_name: string } | null;
+    assistant_coach: { full_name: string } | null;
   };
   coaches: Option[];
   playerTypes: Option[];
   ageCategories: Option[];
 }) {
   const [pending, startTransition] = useTransition();
+
+  // A batch keeps pointing at its coach even after that person is deactivated
+  // or changes role, which drops them out of the page's active-coach list. Put
+  // them back for this row only: otherwise the dialog would show "No head
+  // coach" for a batch that still has one, hiding the name it is assigned to.
+  const coachOptions = [...coaches];
+  for (const [id, name] of [
+    [batch.head_coach_id, batch.profiles?.full_name],
+    [batch.assistant_coach_id, batch.assistant_coach?.full_name],
+  ] as const) {
+    if (id && !coachOptions.some((c) => c.id === id)) {
+      coachOptions.push({ id, name: name ?? "Unlisted coach" });
+    }
+  }
 
   return (
     <div className="flex justify-end gap-2">
@@ -40,7 +60,7 @@ export function BatchRowActions({
         }
         title="Edit Batch"
         action={updateBatch.bind(null, batch.id)}
-        coaches={coaches}
+        coaches={coachOptions}
         playerTypes={playerTypes}
         ageCategories={ageCategories}
         defaultValues={{
