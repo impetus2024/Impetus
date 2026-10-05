@@ -25,8 +25,10 @@ assertSafeE2ETarget();
 // failure is produced by shrinking the bucket's file size limit, which the
 // storage server enforces on the S3 protocol like any other storage error.
 //
-// Run with --workers=1 alongside documents-storage.spec.ts: both use the one
-// bucket the server is configured with (R2_BUCKET_NAME). See e2e/README.md.
+// Both this file and documents-storage.spec.ts use the one bucket the server
+// is configured with (R2_BUCKET_NAME) and the one dev server, so
+// playwright.config.ts runs the suite with a single worker and keeps the two
+// documents specs together, last — see e2e/README.md.
 test.describe.configure({ mode: "serial" });
 
 const ENDPOINT = process.env.R2_ENDPOINT;
@@ -265,6 +267,8 @@ test.describe("document saves through the app", () => {
     await page.getByLabel("Name").fill("Docs UI Administrator");
     await page.getByLabel("Email ID").fill(email);
     await page.getByLabel("Contact Number").fill("9999999999");
+    await page.getByLabel("Role").click();
+    await page.getByRole("option", { name: "Coach" }).click();
     await page.getByLabel("Upload Profile Picture").setInputFiles(upload("avatar.png"));
     await page.getByRole("button", { name: "Create Administrator" }).click();
 

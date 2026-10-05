@@ -32,6 +32,29 @@ CREATE TYPE "public"."attendance_status" AS ENUM (
 ALTER TYPE "public"."attendance_status" OWNER TO "postgres";
 
 
+CREATE TYPE "public"."document_audit_action" AS ENUM (
+    'upload',
+    'replace',
+    'delete',
+    'cleanup',
+    'orphan',
+    'missing'
+);
+
+
+ALTER TYPE "public"."document_audit_action" OWNER TO "postgres";
+
+
+CREATE TYPE "public"."document_entity_type" AS ENUM (
+    'player',
+    'staff_profile',
+    'injury'
+);
+
+
+ALTER TYPE "public"."document_entity_type" OWNER TO "postgres";
+
+
 CREATE TYPE "public"."email_status" AS ENUM (
     'sent',
     'delivered',
@@ -55,17 +78,6 @@ CREATE TYPE "public"."five_s_answer_scale" AS ENUM (
 
 
 ALTER TYPE "public"."five_s_answer_scale" OWNER TO "postgres";
-
-
-CREATE TYPE "public"."five_s_benchmark_tier" AS ENUM (
-    'poor_ceiling',
-    'average_low',
-    'average_high',
-    'elite_floor'
-);
-
-
-ALTER TYPE "public"."five_s_benchmark_tier" OWNER TO "postgres";
 
 
 CREATE TYPE "public"."five_s_category" AS ENUM (
@@ -120,6 +132,68 @@ CREATE TYPE "public"."whatsapp_status" AS ENUM (
 
 
 ALTER TYPE "public"."whatsapp_status" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."audit_document_columns"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  old_row jsonb := case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end;
+  new_row jsonb := case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) end;
+  row_data jsonb := coalesce(new_row, old_row);
+  row_id uuid := (row_data ->> tg_argv[1])::uuid;
+  row_centre uuid;
+  col text;
+  old_key text;
+  new_key text;
+begin
+  for i in 3 .. tg_nargs - 1 loop
+    col := tg_argv[i];
+    old_key := nullif(old_row ->> col, '');
+    new_key := nullif(new_row ->> col, '');
+    continue when old_key is not distinct from new_key;
+
+    begin
+      if row_centre is null then
+        if tg_argv[2] <> '' then
+          row_centre := (row_data ->> tg_argv[2])::uuid;
+        else
+          -- staff_profiles has no centre_id of its own. During a cascade
+          -- from auth.users the profile may already be gone: NULL then.
+          select p.centre_id into row_centre from public.profiles p where p.id = row_id;
+        end if;
+      end if;
+
+      insert into public.document_audit_events
+        (entity_type, entity_id, centre_id, document_field, action, old_key, new_key, reason, actor_id)
+      values (
+        tg_argv[0]::public.document_entity_type,
+        row_id,
+        row_centre,
+        col,
+        (case
+          when old_key is null then 'upload'
+          when new_key is null then 'delete'
+          else 'replace'
+        end)::public.document_audit_action,
+        old_key,
+        new_key,
+        case when tg_op = 'DELETE' then 'row_deleted' end,
+        auth.uid()
+      );
+    exception when others then
+      -- Never block the document write on the audit trail.
+      raise warning 'document audit insert failed for %.% (%): %', tg_table_name, col, row_id, sqlerrm;
+    end;
+  end loop;
+
+  return null;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."audit_document_columns"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."email_analytics_summary"("p_centre_id" "uuid", "p_since" timestamp with time zone, "p_until" timestamp with time zone) RETURNS TABLE("sent_count" bigint, "delivered_count" bigint, "opened_count" bigint, "clicked_count" bigint, "bounced_count" bigint, "failed_count" bigint, "complained_count" bigint)
@@ -200,11 +274,98 @@ $$;
 ALTER FUNCTION "public"."payments_by_month"("p_centre_id" "uuid", "p_since" "date") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."prevent_document_audit_event_change"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+begin
+  raise exception 'document_audit_events is append-only';
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_document_audit_event_change"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_must_change_password_tamper"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if private.user_role() is not null
+     and new.must_change_password is distinct from old.must_change_password then
+    raise exception 'profiles.must_change_password can only be changed server-side.';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_must_change_password_tamper"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_parent_email_tamper"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if private.user_role() is not null
+     and new.parent_email is distinct from old.parent_email then
+    raise exception 'players.parent_email can only be changed from the Parent Profile.';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_parent_email_tamper"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_player_id_reinsert"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if new.id is null then
+    new.id := gen_random_uuid();
+  elsif private.user_role() is not null then
+    raise exception 'players.id cannot be supplied on insert; let the database assign it.';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_player_id_reinsert"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."prevent_profile_email_tamper"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if private.user_role() is not null
+     and new.email is distinct from old.email then
+    raise exception 'profiles.email can only be changed through Supabase Auth.';
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."prevent_profile_email_tamper"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."prevent_role_escalation"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 begin
+  if private.user_role() is not null
+     and old.role = 'coach' and new.role is distinct from old.role then
+    raise exception 'A coach''s role cannot be changed.';
+  end if;
+
   if private.user_role() = 'centre_admin' then
     if new.centre_id is distinct from old.centre_id then
       raise exception 'Only a super admin can change a profile''s centre.';
@@ -455,7 +616,7 @@ CREATE TABLE IF NOT EXISTS "public"."batches" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "centre_id" "uuid" NOT NULL,
     "name" "text" NOT NULL,
-    "head_coach_id" "uuid" NOT NULL,
+    "head_coach_id" "uuid",
     "player_type_id" "uuid",
     "age_category_id" "uuid" NOT NULL,
     "start_time" time without time zone NOT NULL,
@@ -464,7 +625,7 @@ CREATE TABLE IF NOT EXISTS "public"."batches" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "assistant_coach_id" "uuid",
-    CONSTRAINT "batches_assistant_coach_not_head" CHECK ((("assistant_coach_id" IS NULL) OR ("assistant_coach_id" <> "head_coach_id")))
+    CONSTRAINT "batches_assistant_coach_not_head" CHECK ((("head_coach_id" IS NULL) OR ("assistant_coach_id" IS NULL) OR ("assistant_coach_id" <> "head_coach_id")))
 );
 
 
@@ -490,6 +651,26 @@ CREATE TABLE IF NOT EXISTS "public"."centres" (
 ALTER TABLE "public"."centres" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."document_audit_events" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "entity_type" "public"."document_entity_type",
+    "entity_id" "uuid",
+    "centre_id" "uuid",
+    "document_field" "text",
+    "action" "public"."document_audit_action" NOT NULL,
+    "old_key" "text",
+    "new_key" "text",
+    "reason" "text",
+    "actor_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "clock_timestamp"() NOT NULL,
+    CONSTRAINT "document_audit_events_has_key" CHECK ((("old_key" IS NOT NULL) OR ("new_key" IS NOT NULL))),
+    CONSTRAINT "document_audit_events_reason_length" CHECK ((("reason" IS NULL) OR ("length"("reason") <= 200)))
+);
+
+
+ALTER TABLE "public"."document_audit_events" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."email_logs" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "resend_email_id" "text",
@@ -510,11 +691,16 @@ CREATE TABLE IF NOT EXISTS "public"."email_logs" (
     "open_count" integer DEFAULT 0 NOT NULL,
     "click_count" integer DEFAULT 0 NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "idempotency_key" "text"
 );
 
 
 ALTER TABLE "public"."email_logs" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."email_logs"."idempotency_key" IS 'Caller-supplied de-duplication key for emails that must be sent at most once (see sendTransactionalEmail in src/lib/email/send.ts). NULL for re-sendable email types.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."email_webhook_events" (
@@ -534,6 +720,7 @@ CREATE TABLE IF NOT EXISTS "public"."five_s_age_bands" (
     "max_age" smallint,
     "display_order" integer DEFAULT 0 NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "gender" "text",
     CONSTRAINT "five_s_age_bands_range" CHECK ((("min_age" >= 4) AND (("max_age" IS NULL) OR ("max_age" >= "min_age"))))
 );
 
@@ -640,27 +827,46 @@ CREATE TABLE IF NOT EXISTS "public"."five_s_stamina_benchmarks" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "test_id" "uuid" NOT NULL,
     "age_band_id" "uuid" NOT NULL,
-    "tier" "public"."five_s_benchmark_tier" NOT NULL,
-    "value" numeric(7,2),
-    "level" smallint,
-    "shuttle" smallint,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "five_s_stamina_benchmarks_shape" CHECK (((("value" IS NOT NULL) AND ("level" IS NULL) AND ("shuttle" IS NULL)) OR (("value" IS NULL) AND ("level" IS NOT NULL) AND ("shuttle" IS NOT NULL))))
+    "higher_is_better" boolean NOT NULL,
+    "score_5_boundary" numeric(6,2) NOT NULL,
+    "score_4_boundary" numeric(6,2) NOT NULL,
+    "score_3_boundary" numeric(6,2) NOT NULL,
+    "score_2_boundary" numeric(6,2) NOT NULL,
+    CONSTRAINT "five_s_stamina_benchmarks_order" CHECK ((("higher_is_better" AND ("score_5_boundary" > "score_4_boundary") AND ("score_4_boundary" > "score_3_boundary") AND ("score_3_boundary" > "score_2_boundary")) OR ((NOT "higher_is_better") AND ("score_5_boundary" < "score_4_boundary") AND ("score_4_boundary" < "score_3_boundary") AND ("score_3_boundary" < "score_2_boundary"))))
 );
 
 
 ALTER TABLE "public"."five_s_stamina_benchmarks" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."five_s_strength_benchmarks" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "test_id" "uuid" NOT NULL,
+    "age_band_id" "uuid" NOT NULL,
+    "higher_is_better" boolean NOT NULL,
+    "score_5_boundary" numeric(6,2),
+    "score_4_boundary" numeric(6,2) NOT NULL,
+    "score_3_boundary" numeric(6,2) NOT NULL,
+    "score_2_boundary" numeric(6,2) NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "five_s_strength_benchmarks_order" CHECK ((("higher_is_better" AND ("score_5_boundary" > "score_4_boundary") AND ("score_4_boundary" > "score_3_boundary") AND ("score_3_boundary" > "score_2_boundary")) OR ((NOT "higher_is_better") AND ("score_5_boundary" < "score_4_boundary") AND ("score_4_boundary" < "score_3_boundary") AND ("score_3_boundary" < "score_2_boundary"))))
+);
+
+
+ALTER TABLE "public"."five_s_strength_benchmarks" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."five_s_test_benchmarks" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "test_id" "uuid" NOT NULL,
     "age_band_id" "uuid" NOT NULL,
-    "min_value" numeric(6,2) NOT NULL,
-    "max_value" numeric(6,2) NOT NULL,
-    "avg_value" numeric(6,2) NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "five_s_test_benchmarks_range" CHECK ((("min_value" <= "max_value") AND (("avg_value" >= "min_value") AND ("avg_value" <= "max_value"))))
+    "score_5_ceiling" numeric(6,2) NOT NULL,
+    "score_4_ceiling" numeric(6,2) NOT NULL,
+    "score_3_ceiling" numeric(6,2) NOT NULL,
+    "score_2_ceiling" numeric(6,2) NOT NULL,
+    CONSTRAINT "five_s_test_benchmarks_bands_order" CHECK ((("score_5_ceiling" < "score_4_ceiling") AND ("score_4_ceiling" < "score_3_ceiling") AND ("score_3_ceiling" < "score_2_ceiling")))
 );
 
 
@@ -675,7 +881,8 @@ CREATE TABLE IF NOT EXISTS "public"."five_s_tests" (
     "display_order" integer DEFAULT 0 NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "group_name" "text",
-    "is_required" boolean DEFAULT true NOT NULL
+    "is_required" boolean DEFAULT true NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL
 );
 
 
@@ -863,7 +1070,7 @@ ALTER TABLE "public"."player_types" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."players" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" NOT NULL,
     "centre_id" "uuid" NOT NULL,
     "name" "text" NOT NULL,
     "date_of_birth" "date" NOT NULL,
@@ -916,11 +1123,16 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "is_active" boolean DEFAULT true NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "must_change_password" boolean DEFAULT false NOT NULL,
     CONSTRAINT "centre_required_for_staff" CHECK (((("role" = ANY (ARRAY['centre_admin'::"public"."user_role", 'coach'::"public"."user_role", 'medical'::"public"."user_role", 'staff'::"public"."user_role", 'finance'::"public"."user_role"])) AND ("centre_id" IS NOT NULL)) OR ("role" = ANY (ARRAY['super_admin'::"public"."user_role", 'parent'::"public"."user_role"]))))
 );
 
 
 ALTER TABLE "public"."profiles" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."profiles"."must_change_password" IS 'Set when a temporary password is generated for this account (provisionUser/resetUserPassword). Enforced in verifySession (src/lib/auth/dal.ts), which redirects to /reset-password until it is cleared by a successful password change.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."staff_profiles" (
@@ -988,6 +1200,11 @@ ALTER TABLE ONLY "public"."batches"
 
 ALTER TABLE ONLY "public"."centres"
     ADD CONSTRAINT "centres_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."document_audit_events"
+    ADD CONSTRAINT "document_audit_events_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1072,7 +1289,17 @@ ALTER TABLE ONLY "public"."five_s_stamina_benchmarks"
 
 
 ALTER TABLE ONLY "public"."five_s_stamina_benchmarks"
-    ADD CONSTRAINT "five_s_stamina_benchmarks_test_id_age_band_id_tier_key" UNIQUE ("test_id", "age_band_id", "tier");
+    ADD CONSTRAINT "five_s_stamina_benchmarks_test_id_age_band_id_key" UNIQUE ("test_id", "age_band_id");
+
+
+
+ALTER TABLE ONLY "public"."five_s_strength_benchmarks"
+    ADD CONSTRAINT "five_s_strength_benchmarks_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."five_s_strength_benchmarks"
+    ADD CONSTRAINT "five_s_strength_benchmarks_test_id_age_band_id_key" UNIQUE ("test_id", "age_band_id");
 
 
 
@@ -1226,7 +1453,31 @@ CREATE INDEX "batches_player_type_id_idx" ON "public"."batches" USING "btree" ("
 
 
 
+CREATE INDEX "document_audit_events_action_created_at_idx" ON "public"."document_audit_events" USING "btree" ("action", "created_at" DESC);
+
+
+
+CREATE INDEX "document_audit_events_created_at_idx" ON "public"."document_audit_events" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "document_audit_events_entity_idx" ON "public"."document_audit_events" USING "btree" ("entity_type", "entity_id", "created_at" DESC);
+
+
+
+CREATE INDEX "document_audit_events_new_key_idx" ON "public"."document_audit_events" USING "btree" ("new_key") WHERE ("new_key" IS NOT NULL);
+
+
+
+CREATE INDEX "document_audit_events_old_key_idx" ON "public"."document_audit_events" USING "btree" ("old_key") WHERE ("old_key" IS NOT NULL);
+
+
+
 CREATE INDEX "email_logs_centre_id_sent_at_idx" ON "public"."email_logs" USING "btree" ("centre_id", "sent_at" DESC);
+
+
+
+CREATE UNIQUE INDEX "email_logs_idempotency_key_idx" ON "public"."email_logs" USING "btree" ("idempotency_key") WHERE ("idempotency_key" IS NOT NULL);
 
 
 
@@ -1311,6 +1562,10 @@ CREATE INDEX "five_s_results_test_id_idx" ON "public"."five_s_results" USING "bt
 
 
 CREATE INDEX "five_s_stamina_benchmarks_test_id_idx" ON "public"."five_s_stamina_benchmarks" USING "btree" ("test_id");
+
+
+
+CREATE INDEX "five_s_strength_benchmarks_test_id_idx" ON "public"."five_s_strength_benchmarks" USING "btree" ("test_id");
 
 
 
@@ -1474,6 +1729,42 @@ CREATE INDEX "whatsapp_logs_status_idx" ON "public"."whatsapp_logs" USING "btree
 
 
 
+CREATE OR REPLACE TRIGGER "audit_document_columns" AFTER INSERT OR DELETE OR UPDATE OF "report_doc_path" ON "public"."injuries" FOR EACH ROW EXECUTE FUNCTION "public"."audit_document_columns"('injury', 'id', 'centre_id', 'report_doc_path');
+
+
+
+CREATE OR REPLACE TRIGGER "audit_document_columns" AFTER INSERT OR DELETE OR UPDATE OF "aadhaar_doc_path", "medical_records_path", "profile_picture_path" ON "public"."players" FOR EACH ROW EXECUTE FUNCTION "public"."audit_document_columns"('player', 'id', 'centre_id', 'aadhaar_doc_path', 'medical_records_path', 'profile_picture_path');
+
+
+
+CREATE OR REPLACE TRIGGER "audit_document_columns" AFTER INSERT OR DELETE OR UPDATE OF "aadhaar_doc_path", "birth_certificate_path", "profile_picture_path", "other_documents_path" ON "public"."staff_profiles" FOR EACH ROW EXECUTE FUNCTION "public"."audit_document_columns"('staff_profile', 'profile_id', '', 'aadhaar_doc_path', 'birth_certificate_path', 'profile_picture_path', 'other_documents_path');
+
+
+
+CREATE OR REPLACE TRIGGER "prevent_document_audit_event_change" BEFORE DELETE OR UPDATE ON "public"."document_audit_events" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_document_audit_event_change"();
+
+
+
+CREATE OR REPLACE TRIGGER "prevent_document_audit_event_truncate" BEFORE TRUNCATE ON "public"."document_audit_events" FOR EACH STATEMENT EXECUTE FUNCTION "public"."prevent_document_audit_event_change"();
+
+
+
+CREATE OR REPLACE TRIGGER "prevent_must_change_password_tamper" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_must_change_password_tamper"();
+
+
+
+CREATE OR REPLACE TRIGGER "prevent_parent_email_tamper" BEFORE UPDATE ON "public"."players" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_parent_email_tamper"();
+
+
+
+CREATE OR REPLACE TRIGGER "prevent_player_id_reinsert" BEFORE INSERT ON "public"."players" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_player_id_reinsert"();
+
+
+
+CREATE OR REPLACE TRIGGER "prevent_profile_email_tamper" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_profile_email_tamper"();
+
+
+
 CREATE OR REPLACE TRIGGER "prevent_role_escalation" BEFORE UPDATE ON "public"."profiles" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_role_escalation"();
 
 
@@ -1511,6 +1802,10 @@ CREATE OR REPLACE TRIGGER "set_updated_at" BEFORE UPDATE ON "public"."five_s_res
 
 
 CREATE OR REPLACE TRIGGER "set_updated_at" BEFORE UPDATE ON "public"."five_s_stamina_benchmarks" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "set_updated_at" BEFORE UPDATE ON "public"."five_s_strength_benchmarks" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
 
 
 
@@ -1685,6 +1980,16 @@ ALTER TABLE ONLY "public"."five_s_stamina_benchmarks"
 
 ALTER TABLE ONLY "public"."five_s_stamina_benchmarks"
     ADD CONSTRAINT "five_s_stamina_benchmarks_test_id_fkey" FOREIGN KEY ("test_id") REFERENCES "public"."five_s_tests"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."five_s_strength_benchmarks"
+    ADD CONSTRAINT "five_s_strength_benchmarks_age_band_id_fkey" FOREIGN KEY ("age_band_id") REFERENCES "public"."five_s_age_bands"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."five_s_strength_benchmarks"
+    ADD CONSTRAINT "five_s_strength_benchmarks_test_id_fkey" FOREIGN KEY ("test_id") REFERENCES "public"."five_s_tests"("id") ON DELETE CASCADE;
 
 
 
@@ -1943,6 +2248,14 @@ CREATE POLICY "authenticated can view five_s_questions" ON "public"."five_s_ques
 
 
 CREATE POLICY "authenticated can view five_s_stamina_benchmarks" ON "public"."five_s_stamina_benchmarks" FOR SELECT USING (("auth"."uid"() IS NOT NULL));
+
+
+
+CREATE POLICY "authenticated can view five_s_strength_benchmarks" ON "public"."five_s_strength_benchmarks" FOR SELECT USING (("auth"."uid"() IS NOT NULL));
+
+
+
+CREATE POLICY "authenticated can view five_s_test_benchmarks" ON "public"."five_s_test_benchmarks" FOR SELECT USING (("auth"."uid"() IS NOT NULL));
 
 
 
@@ -2219,6 +2532,9 @@ CREATE POLICY "coach views players in own batches" ON "public"."players" FOR SEL
 
 
 
+ALTER TABLE "public"."document_audit_events" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."email_logs" ENABLE ROW LEVEL SECURITY;
 
 
@@ -2247,6 +2563,9 @@ ALTER TABLE "public"."five_s_results" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."five_s_stamina_benchmarks" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."five_s_strength_benchmarks" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."five_s_test_benchmarks" ENABLE ROW LEVEL SECURITY;
@@ -2644,6 +2963,14 @@ CREATE POLICY "super_admin manages five_s_stamina_benchmarks" ON "public"."five_
 
 
 
+CREATE POLICY "super_admin manages five_s_strength_benchmarks" ON "public"."five_s_strength_benchmarks" USING (("private"."user_role"() = 'super_admin'::"public"."user_role")) WITH CHECK (("private"."user_role"() = 'super_admin'::"public"."user_role"));
+
+
+
+CREATE POLICY "super_admin views document_audit_events" ON "public"."document_audit_events" FOR SELECT USING (("private"."user_role"() = 'super_admin'::"public"."user_role"));
+
+
+
 CREATE POLICY "users can view own profile" ON "public"."profiles" FOR SELECT USING (("id" = "auth"."uid"()));
 
 
@@ -2666,11 +2993,19 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."audit_document_columns"() FROM PUBLIC;
+
+
+
 GRANT ALL ON FUNCTION "public"."email_analytics_summary"("p_centre_id" "uuid", "p_since" timestamp with time zone, "p_until" timestamp with time zone) TO "authenticated";
 
 
 
 GRANT ALL ON FUNCTION "public"."payments_by_month"("p_centre_id" "uuid", "p_since" "date") TO "authenticated";
+
+
+
+REVOKE ALL ON FUNCTION "public"."prevent_document_audit_event_change"() FROM PUBLIC;
 
 
 
@@ -2719,6 +3054,12 @@ GRANT ALL ON TABLE "public"."batches" TO "service_role";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."centres" TO "anon";
 GRANT ALL ON TABLE "public"."centres" TO "authenticated";
 GRANT ALL ON TABLE "public"."centres" TO "service_role";
+
+
+
+GRANT REFERENCES,TRIGGER,MAINTAIN ON TABLE "public"."document_audit_events" TO "anon";
+GRANT SELECT,REFERENCES,TRIGGER,MAINTAIN ON TABLE "public"."document_audit_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."document_audit_events" TO "service_role";
 
 
 
@@ -2779,6 +3120,12 @@ GRANT ALL ON TABLE "public"."five_s_results" TO "service_role";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."five_s_stamina_benchmarks" TO "anon";
 GRANT ALL ON TABLE "public"."five_s_stamina_benchmarks" TO "authenticated";
 GRANT ALL ON TABLE "public"."five_s_stamina_benchmarks" TO "service_role";
+
+
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."five_s_strength_benchmarks" TO "anon";
+GRANT ALL ON TABLE "public"."five_s_strength_benchmarks" TO "authenticated";
+GRANT ALL ON TABLE "public"."five_s_strength_benchmarks" TO "service_role";
 
 
 

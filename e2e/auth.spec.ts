@@ -149,6 +149,10 @@ test.describe("password recovery link", () => {
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(newPassword);
     await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page).not.toHaveURL(/\/login/);
+    // Signing in immediately after a password change can take a few seconds
+    // under `next dev` (the action and route compile on first use), so allow
+    // more than the default assertion timeout before deciding it didn't leave
+    // the login page.
+    await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
   });
 });
