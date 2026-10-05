@@ -276,9 +276,14 @@ test.describe("batch coach management", () => {
 
     // "No head coach" is an edit-only affordance: a new batch has to start
     // with someone responsible for it.
+    // Wait for the popup before asserting on (and then dismissing) it: an
+    // Escape that lands before the listbox opens closes the whole dialog.
     await page.getByLabel("Head Coach").click();
+    await expect(page.getByRole("listbox")).toBeVisible();
     await expect(page.getByRole("option", { name: "No head coach" })).toHaveCount(0);
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toBeVisible();
 
     const name = `E2E Never Created ${stamp}`;
     await page.getByLabel("Batch Name").fill(name);
