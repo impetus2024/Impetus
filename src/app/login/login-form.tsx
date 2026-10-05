@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -37,10 +37,14 @@ export function LoginForm() {
     searchParams.get("disabled") === "1" || state?.error === ACCOUNT_DISABLED_MESSAGE;
   const [disabledDialogOpen, setDisabledDialogOpen] = useState(disabled);
   // Re-open on every new disabled result (redirect or a fresh failed
-  // submit), even if the user already dismissed it once.
-  useEffect(() => {
+  // submit), even if the user already dismissed it once. Adjusted during
+  // render rather than in an effect, per
+  // https://react.dev/learn/you-might-not-need-an-effect
+  const [prevResult, setPrevResult] = useState({ disabled, state });
+  if (prevResult.disabled !== disabled || prevResult.state !== state) {
+    setPrevResult({ disabled, state });
     if (disabled) setDisabledDialogOpen(true);
-  }, [disabled, state]);
+  }
 
   return (
     <>
