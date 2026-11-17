@@ -85,7 +85,7 @@ export function validateEnv(): void {
     // Per-IP login/reset limits only work behind a declared trusted proxy
     // (see lib/auth/client-ip.ts). Without one they are skipped and the
     // limiter is per-account only, which a single attacker can use to lock a
-    // victim out — so say so loudly rather than fail the boot.
+    // victim out - so say so loudly rather than fail the boot.
     if (process.env.VERCEL !== "1" && !process.env.TRUSTED_PROXY_HOPS) {
       logWarning(
         "Neither VERCEL=1 nor TRUSTED_PROXY_HOPS is set: client IPs are unknown, so per-IP login/reset rate limits are disabled. Set TRUSTED_PROXY_HOPS to the number of proxies in front of the app."
