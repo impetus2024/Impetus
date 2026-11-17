@@ -13,6 +13,8 @@ const ROLE_HOME: Record<UserRole, string> = {
   // requireRole call for the actual enforcement).
   staff: "/centre-admin",
   finance: "/centre-admin",
+  // Media Team has its own route tree: Monthly Highlights + News & Events only.
+  media: "/media",
 };
 
 export function roleHome(role: UserRole) {

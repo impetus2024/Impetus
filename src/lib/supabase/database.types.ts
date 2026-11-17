@@ -951,6 +951,8 @@ export type Database = {
           created_at: string
           id: string
           performed_by: string
+          performed_by_name: string | null
+          performed_by_role: Database["public"]["Enums"]["user_role"] | null
           player_id: string
           reason: string
         }
@@ -960,6 +962,8 @@ export type Database = {
           created_at?: string
           id?: string
           performed_by: string
+          performed_by_name?: string | null
+          performed_by_role?: Database["public"]["Enums"]["user_role"] | null
           player_id: string
           reason: string
         }
@@ -969,6 +973,8 @@ export type Database = {
           created_at?: string
           id?: string
           performed_by?: string
+          performed_by_name?: string | null
+          performed_by_role?: Database["public"]["Enums"]["user_role"] | null
           player_id?: string
           reason?: string
         }
@@ -1991,6 +1997,8 @@ export type Database = {
           created_at: string
           id: string
           performed_by: string
+          performed_by_name: string | null
+          performed_by_role: Database["public"]["Enums"]["user_role"] | null
           player_id: string
           reason: string
         }
@@ -2032,6 +2040,7 @@ export type Database = {
         | "parent"
         | "staff"
         | "finance"
+        | "media"
       whatsapp_status: "sent" | "failed" | "skipped"
     }
     CompositeTypes: {
@@ -2194,6 +2203,7 @@ export const Constants = {
         "parent",
         "staff",
         "finance",
+        "media",
       ],
       whatsapp_status: ["sent", "failed", "skipped"],
     },

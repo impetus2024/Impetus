@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CalendarCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/dal";
@@ -42,7 +43,7 @@ export default async function BatchesPage({
   let query = supabase
     .from("batches")
     .select(
-      "id, name, head_coach_id, assistant_coach_id, player_type_id, age_category_id, start_time, end_time, is_active, profiles!batches_head_coach_id_fkey(full_name), assistant_coach:profiles!batches_assistant_coach_id_fkey(full_name), player_types(name), age_categories(name)",
+      "id, name, head_coach_id, assistant_coach_id, player_type_id, age_category_id, start_time, end_time, is_active, profiles!batches_head_coach_id_fkey(full_name), assistant_coach:profiles!batches_assistant_coach_id_fkey(full_name), player_types(name), age_categories(name), player_batches(count)",
       { count: "exact" }
     )
     .eq("centre_id", centreAdmin.centre_id!);
@@ -122,6 +123,7 @@ export default async function BatchesPage({
             <TableHead>Batch</TableHead>
             <TableHead>Head Coach</TableHead>
             <TableHead>Assistant Coach</TableHead>
+            <TableHead>Students</TableHead>
             <TableHead>Program Type</TableHead>
             <TableHead>Age Category</TableHead>
             <TableHead>Time</TableHead>
@@ -135,6 +137,11 @@ export default async function BatchesPage({
               <TableCell>{batch.name}</TableCell>
               <TableCell>{batch.profiles?.full_name ?? "—"}</TableCell>
               <TableCell>{batch.assistant_coach?.full_name ?? "—"}</TableCell>
+              <TableCell>
+                <Link href={`/centre-admin/batches/${batch.id}`} className="font-medium text-blue-600 underline underline-offset-4 hover:text-blue-800">
+                  {batch.player_batches[0]?.count ?? 0}
+                </Link>
+              </TableCell>
               <TableCell>{batch.player_types?.name ?? "—"}</TableCell>
               <TableCell>{batch.age_categories?.name}</TableCell>
               <TableCell>
@@ -161,7 +168,7 @@ export default async function BatchesPage({
           ))}
           {batches?.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8}>
+              <TableCell colSpan={9}>
                 {hasFilters ? (
                   <EmptyState icon={CalendarCheck} title="No batches match your search" message="Try a different name or clear the filters." />
                 ) : (

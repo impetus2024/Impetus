@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export function DeleteNewsEventDialog({ newsEvent }: { newsEvent: { id: string }
         <DialogHeader>
           <DialogTitle>Delete News / Event?</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldDescription>This action will permanently remove:</FieldDescription>
           <ul className="mt-2 ml-4 list-disc text-sm text-muted-foreground">
             <li>The News / Event item</li>
@@ -44,7 +45,7 @@ export function DeleteNewsEventDialog({ newsEvent }: { newsEvent: { id: string }
               {pending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

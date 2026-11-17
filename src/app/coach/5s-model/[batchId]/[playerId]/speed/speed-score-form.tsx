@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState } from "react";
 import Link from "next/link";
@@ -33,7 +34,7 @@ export function SpeedScoreForm({
   const allLocked = tests.length > 0 && tests.every((t) => lockedTestIds.has(t.id));
 
   return (
-    <form action={formAction} className="space-y-6">
+    <ActionForm action={formAction} className="space-y-6">
       <FieldGroup>
         {tests.map((test) => {
           const locked = lockedTestIds.has(test.id);
@@ -98,6 +99,6 @@ export function SpeedScoreForm({
           {pending ? "Submitting..." : "Submit"}
         </Button>
       </div>
-    </form>
+    </ActionForm>
   );
 }

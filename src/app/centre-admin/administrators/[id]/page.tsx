@@ -10,6 +10,7 @@ const ROLE_LABEL: Record<string, string> = {
   medical: "Medical",
   staff: "Staff",
   finance: "Finance",
+  media: "Media Team Access",
 };
 
 export default async function AdministratorDetailPage({

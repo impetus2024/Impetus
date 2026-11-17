@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useState } from "react";
 import { Pencil } from "lucide-react";
@@ -72,7 +73,7 @@ export function ParentProfileForm({
   }
 
   return (
-    <form action={formAction} className="space-y-6">
+    <ActionForm action={formAction} className="space-y-6">
       <input type="hidden" name="updatedAt" value={defaultValues.updatedAt ?? ""} />
       <div className="flex justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={closeEditor}>
@@ -170,6 +171,6 @@ export function ParentProfileForm({
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : "Save"}
       </Button>
-    </form>
+    </ActionForm>
   );
 }

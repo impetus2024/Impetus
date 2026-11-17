@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ export function StrengthBenchmarkDialog({
         <DialogHeader>
           <DialogTitle>{testName} — Benchmarks by Age</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="space-y-4">
+        <ActionForm action={submit} className="space-y-4">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -112,7 +113,7 @@ export function StrengthBenchmarkDialog({
               {pending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

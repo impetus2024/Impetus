@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useMemo, useState } from "react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
@@ -44,7 +45,7 @@ export function AddGatePassDialog({ players }: { players: Player[] }) {
         <DialogHeader>
           <DialogTitle>Add Movement Pass</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="playerId">Select Player</FieldLabel>
@@ -81,7 +82,7 @@ export function AddGatePassDialog({ players }: { players: Player[] }) {
               {pending ? "Saving..." : actionLabel}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

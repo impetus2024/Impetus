@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useState } from "react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
@@ -51,7 +52,7 @@ export function EditNewsEventDialog({
         <DialogHeader>
           <DialogTitle>Edit — {newsEvent.title}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`type-${newsEvent.id}`}>Type</FieldLabel>
@@ -111,7 +112,7 @@ export function EditNewsEventDialog({
               {pending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

@@ -1,15 +1,33 @@
-// Wrapper around the Supabase CLI for the two operations that write to
-// whatever project is currently linked (`db push`, `db reset --linked`) and
-// the operation that decides which project that is (`link`). Run only via
-// the npm scripts in package.json — never call `supabase db push` or
+// Wrapper around the Supabase CLI for the operations that write to whatever
+// project is currently linked (`db push`, `db reset --linked`) and the
+// operation that decides which project that is (`link`). Run only via the
+// npm scripts in package.json — never call `supabase db push` or
 // `supabase link` directly, so this gate can't be skipped by habit.
 //
-// `db reset` without `--linked` (the everyday local workflow) is NOT gated
-// here — it only ever touches the local Docker Postgres instance and is
-// safe by default; call the Supabase CLI directly for that.
+// Allow-list only: `link`, `db push`, `db reset`. Every other command is
+// refused. `db reset --linked` is HARD-BLOCKED for any project in
+// PRODUCTION_PROJECT_REFS — no flag overrides that. `--db-url` is refused for
+// push/reset because it would bypass the linked-project check entirely.
+//
+// `db reset` without `--linked` (the everyday local workflow) only touches the
+// local Docker Postgres instance and passes through.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+// Supabase project refs that must never be reset. Add a ref here when a new
+// production project is created.
+export const PRODUCTION_PROJECT_REFS: readonly string[] = ["hgxljbhxuquclnfmgzws"];
+
+export type GuardDecision =
+  | { action: "run"; args: string[] }
+  | { action: "refuse"; reason: string };
+
+const refuse = (reason: string): GuardDecision => ({ action: "refuse", reason });
+
+// Matches `--flag` and `--flag=value` (cobra accepts `--linked=true`).
+const hasFlag = (args: string[], flag: string) =>
+  args.some((a) => a === flag || a.startsWith(`${flag}=`));
 
 function getLinkedProjectRef(): string | null {
   const refPath = join(process.cwd(), "supabase", ".temp", "project-ref");
@@ -17,70 +35,75 @@ function getLinkedProjectRef(): string | null {
   return readFileSync(refPath, "utf8").trim();
 }
 
-function run(args: string[]): never {
-  const result = spawnSync("npx", ["supabase", ...args], { stdio: "inherit", shell: true });
-  process.exit(result.status ?? 1);
-}
-
-function guardLink(args: string[]): void {
+function decideLink(args: string[]): GuardDecision {
   const refFlagIndex = args.indexOf("--project-ref");
   const targetRef = refFlagIndex >= 0 ? args[refFlagIndex + 1] : "(unspecified — CLI will prompt)";
-  console.log(`\n[supabase-guard] About to LINK this repo to project: ${targetRef}`);
-  console.log(`[supabase-guard] Every subsequent \`db push\` targets whatever project is linked.\n`);
-
   if (!args.includes("--yes")) {
-    console.error(
-      `[supabase-guard] Refusing: re-run with --yes appended once you've confirmed "${targetRef}" ` +
+    return refuse(
+      `Refusing: re-run with --yes appended once you've confirmed "${targetRef}" ` +
         `is the project you mean to link (check it's not production unless that's intentional).`
     );
-    process.exit(1);
   }
-  run(args.filter((a) => a !== "--yes"));
+  return { action: "run", args: args.filter((a) => a !== "--yes") };
 }
 
-function guardLinkedWrite(args: string[]): void {
-  const linkedRef = getLinkedProjectRef();
-  console.log(`\n[supabase-guard] About to run: supabase ${args.join(" ")}`);
-  console.log(`[supabase-guard] Currently linked project ref: ${linkedRef ?? "(not linked)"}\n`);
-
+function decideLinkedWrite(args: string[], linkedRef: string | null): GuardDecision {
   if (!linkedRef) {
-    console.error("[supabase-guard] Refusing: no linked project found. Run `npm run supabase:link` first.");
-    process.exit(1);
+    return refuse("Refusing: no linked project found. Run `npm run supabase:link` first.");
   }
 
-  const confirmFlagIndex = args.indexOf("--confirm-ref");
-  const typedRef = confirmFlagIndex >= 0 ? args[confirmFlagIndex + 1] : undefined;
+  if (args[1] === "reset" && PRODUCTION_PROJECT_REFS.includes(linkedRef)) {
+    return refuse(
+      `BLOCKED: \`db reset --linked\` would wipe the PRODUCTION project (${linkedRef}). ` +
+        `This is hard-blocked and cannot be overridden with --confirm-ref. Link a non-production ` +
+        `project first, or restore from backup (docs/BACKUP_RECOVERY.md).`
+    );
+  }
 
+  const confirmIndex = args.indexOf("--confirm-ref");
+  const typedRef = confirmIndex >= 0 ? args[confirmIndex + 1] : undefined;
   if (typedRef !== linkedRef) {
-    console.error(
-      `[supabase-guard] Refusing: this command writes to the LINKED project (${linkedRef}), which may ` +
+    return refuse(
+      `Refusing: this command writes to the LINKED project (${linkedRef}), which may ` +
         `be production.\nTo proceed on purpose, re-run with "--confirm-ref ${linkedRef}" appended — ` +
         `typing the ref yourself confirms you mean it, not just a copy-pasted flag.`
     );
-    process.exit(1);
   }
 
-  run(args.filter((a, i) => a !== "--confirm-ref" && args[i - 1] !== "--confirm-ref"));
+  return { action: "run", args: args.filter((a, i) => a !== "--confirm-ref" && args[i - 1] !== "--confirm-ref") };
+}
+
+export function decide(args: string[], linkedRef: string | null): GuardDecision {
+  const [group, sub] = args;
+
+  if (group === "link") return decideLink(args);
+
+  if (group === "db" && (sub === "push" || sub === "reset")) {
+    if (hasFlag(args, "--db-url")) {
+      return refuse("Refusing: --db-url bypasses the linked-project check and is not allowed here.");
+    }
+    if (sub === "push" || hasFlag(args, "--linked")) return decideLinkedWrite(args, linkedRef);
+    return { action: "run", args }; // plain local `db reset`
+  }
+
+  return refuse(
+    `Refusing: "${args.join(" ") || "(no command)"}" is not an allowed command. ` +
+      `Allowed: link, db push, db reset. Call the Supabase CLI directly for read-only commands.`
+  );
 }
 
 function main() {
   const args = process.argv.slice(2);
-  const [group, sub] = args;
+  const linkedRef = getLinkedProjectRef();
+  console.log(`\n[supabase-guard] supabase ${args.join(" ")}  (linked: ${linkedRef ?? "none"})\n`);
 
-  if (group === "link") {
-    guardLink(args);
-    return;
+  const decision = decide(args, linkedRef);
+  if (decision.action === "refuse") {
+    console.error(`[supabase-guard] ${decision.reason}`);
+    process.exit(1);
   }
-
-  if (group === "db" && (sub === "push" || (sub === "reset" && args.includes("--linked")))) {
-    guardLinkedWrite(args);
-    return;
-  }
-
-  // Anything else passed through this wrapper (shouldn't normally happen —
-  // package.json only wires the two gated cases above) — run unguarded
-  // rather than silently no-op.
-  run(args);
+  const result = spawnSync("npx", ["supabase", ...decision.args], { stdio: "inherit", shell: true });
+  process.exit(result.status ?? 1);
 }
 
-main();
+if (require.main === module) main();

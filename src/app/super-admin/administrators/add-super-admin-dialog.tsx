@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ export function AddSuperAdminDialog() {
         <DialogHeader>
           <DialogTitle>Add Super Admin</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="space-y-6">
+        <ActionForm action={submit} className="space-y-6">
           <FieldSet>
             <FieldGroup>
               <Field>
@@ -56,7 +57,7 @@ export function AddSuperAdminDialog() {
               {pending ? "Creating..." : "Create Super Admin"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

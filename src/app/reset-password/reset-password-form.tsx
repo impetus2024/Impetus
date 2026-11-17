@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ export function ResetPasswordForm({ required = false }: { required?: boolean }) 
           : "Choose a new password for your account."}
       </p>
       <div className="mt-8">
-        <form action={action}>
+        <ActionForm action={action}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="password">New password</FieldLabel>
@@ -59,7 +60,7 @@ export function ResetPasswordForm({ required = false }: { required?: boolean }) 
               {pending ? "Saving..." : "Save password"}
             </Button>
           </FieldGroup>
-        </form>
+        </ActionForm>
       </div>
     </AuthShell>
   );

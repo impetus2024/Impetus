@@ -39,3 +39,5 @@ export const FIVE_S_CATEGORY_META: Record<
 };
 
 export const FIVE_S_CATEGORY_ORDER: FiveSCategory[] = ["speed", "stamina", "strength", "spirit", "skill"];
+
+export const FIVE_S_CATEGORIES = Object.keys(FIVE_S_CATEGORY_META) as FiveSCategory[];

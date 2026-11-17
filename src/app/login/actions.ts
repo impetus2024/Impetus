@@ -4,7 +4,8 @@ import * as z from "zod";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { roleHome, type UserRole } from "@/lib/auth/dal";
-import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
+import { consumeAll, clearAttempts, getClientIp, RATE_LIMIT_UNAVAILABLE_MESSAGE } from "@/lib/auth/rate-limit";
+import { authRateKeys } from "@/lib/auth/rate-limit-core";
 import { safeNextPath } from "@/lib/url";
 import { logWarning } from "@/lib/logger";
 import { ACCOUNT_DISABLED_MESSAGE } from "./constants";
@@ -29,8 +30,11 @@ export async function login(
     return { error: "Enter a valid email and password." };
   }
 
-  const rateLimitKey = `login:${parsed.data.email.trim().toLowerCase()}`;
-  const rateLimit = isRateLimited(rateLimitKey);
+  const rateKeys = authRateKeys("login", parsed.data.email, await getClientIp());
+  // Count the attempt BEFORE verifying (atomic): concurrent guesses can't all
+  // pass a stale check. A successful login clears the counter below.
+  const rateLimit = await consumeAll(rateKeys.consume);
+  if (rateLimit.unavailable) return { error: RATE_LIMIT_UNAVAILABLE_MESSAGE };
   if (rateLimit.limited) {
     return {
       error: `Too many failed attempts. Try again in ${rateLimit.retryAfterMinutes} minute${rateLimit.retryAfterMinutes === 1 ? "" : "s"}.`,
@@ -47,10 +51,9 @@ export async function login(
     // since the user-facing message below is intentionally generic (never
     // reveal *why* a login failed to an unauthenticated caller).
     logWarning(`Login failed for ${parsed.data.email.trim().toLowerCase()}:`, error);
-    recordAttempt(rateLimitKey);
     return { error: "Invalid email or password." };
   }
-  clearAttempts(rateLimitKey);
+  await clearAttempts(...rateKeys.clear);
 
   const { data: profile } = await supabase
     .from("profiles")

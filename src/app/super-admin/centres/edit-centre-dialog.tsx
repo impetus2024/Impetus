@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ export function EditCentreDialog({
         <DialogHeader>
           <DialogTitle>Edit Centre — {centre.name}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`name-${centre.id}`}>Centre Name</FieldLabel>
@@ -89,7 +90,7 @@ export function EditCentreDialog({
               {pending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

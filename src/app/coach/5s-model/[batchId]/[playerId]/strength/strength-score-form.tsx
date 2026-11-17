@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState } from "react";
 import Link from "next/link";
@@ -44,7 +45,7 @@ export function StrengthScoreForm({
   }
 
   return (
-    <form action={formAction} className="space-y-8">
+    <ActionForm action={formAction} className="space-y-8">
       {groups.map((group) => (
         <div key={group.label} className="space-y-5">
           {group.label && <h2 className="text-lg font-semibold">{group.label} :</h2>}
@@ -112,6 +113,6 @@ export function StrengthScoreForm({
           {pending ? "Submitting..." : "Submit"}
         </Button>
       </div>
-    </form>
+    </ActionForm>
   );
 }

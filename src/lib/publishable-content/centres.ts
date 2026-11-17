@@ -10,7 +10,7 @@ export function resolveTargetCentreIds(
   actor: { role: UserRole; centre_id: string | null },
   formData: FormData
 ): string[] {
-  if (actor.role === "centre_admin") {
+  if (actor.role === "centre_admin" || actor.role === "media") {
     return actor.centre_id ? [actor.centre_id] : [];
   }
   return formData.getAll("centreIds").map(String);

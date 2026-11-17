@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,7 @@ export function AddAdministratorDialog() {
         <DialogHeader>
           <DialogTitle>Add Administrator</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="space-y-6">
+        <ActionForm action={submit} className="space-y-6">
           <FieldSet>
             <FieldGroup>
               <Field>
@@ -97,6 +98,7 @@ export function AddAdministratorDialog() {
                           medical: "Medical",
                           staff: "Staff",
                           finance: "Finance",
+                          media: "Media Team Access",
                         })[value] ?? value
                       }
                     </SelectValue>
@@ -107,6 +109,7 @@ export function AddAdministratorDialog() {
                     <SelectItem value="medical">Medical</SelectItem>
                     <SelectItem value="staff">Staff</SelectItem>
                     <SelectItem value="finance">Finance</SelectItem>
+                    <SelectItem value="media">Media Team Access</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -150,7 +153,7 @@ export function AddAdministratorDialog() {
               {pending ? "Creating..." : "Create Administrator"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

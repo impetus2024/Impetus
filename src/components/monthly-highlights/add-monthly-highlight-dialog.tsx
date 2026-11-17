@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ export function AddMonthlyHighlightDialog({
         <DialogHeader>
           <DialogTitle>Add Monthly Highlight</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="space-y-6">
+        <ActionForm action={submit} className="space-y-6">
           <FieldSet>
             <FieldLegend variant="label">Highlight details</FieldLegend>
             <FieldGroup>
@@ -66,7 +67,7 @@ export function AddMonthlyHighlightDialog({
               {pending ? "Publishing..." : "Publish Highlight"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

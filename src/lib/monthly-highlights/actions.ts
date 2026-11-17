@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { uploadFile, deleteFile, UploadValidationError } from "@/lib/storage/r2";
 import { resolveTargetCentreIds } from "@/lib/publishable-content/centres";
 import { deleteViaServiceRole } from "@/lib/publishable-content/delete-with-cascade";
-import { DASHBOARD_VIEWER_ROLES } from "@/lib/publishable-content/roles";
+import { CONTENT_MANAGER_ROLES, DASHBOARD_VIEWER_ROLES } from "@/lib/publishable-content/roles";
 import { logError } from "@/lib/logger";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -22,6 +22,7 @@ export type MonthlyHighlightFormState = { error?: string } | undefined;
 function revalidateMonthlyHighlights() {
   revalidatePath("/centre-admin/monthly-highlights");
   revalidatePath("/super-admin/monthly-highlights");
+  revalidatePath("/media/monthly-highlights");
 }
 
 // Centre Admin always auto-publishes to their own (session-resolved) centre
@@ -34,7 +35,7 @@ export async function createMonthlyHighlight(
   _prev: MonthlyHighlightFormState,
   formData: FormData
 ): Promise<MonthlyHighlightFormState> {
-  const actor = await requireRole("centre_admin", "super_admin");
+  const actor = await requireRole(...CONTENT_MANAGER_ROLES);
 
   const parsed = MonthlyHighlightSchema.safeParse({
     title: formData.get("title"),
@@ -120,7 +121,7 @@ export async function updateMonthlyHighlight(
   _prev: MonthlyHighlightFormState,
   formData: FormData
 ): Promise<MonthlyHighlightFormState> {
-  const actor = await requireRole("centre_admin", "super_admin");
+  const actor = await requireRole(...CONTENT_MANAGER_ROLES);
 
   const parsed = MonthlyHighlightSchema.safeParse({
     title: formData.get("title"),
@@ -195,7 +196,7 @@ export async function deleteMonthlyHighlight(
   _prev: MonthlyHighlightFormState,
   _formData: FormData
 ): Promise<MonthlyHighlightFormState> {
-  await requireRole("centre_admin", "super_admin");
+  await requireRole(...CONTENT_MANAGER_ROLES);
 
   const supabase = await createClient();
 
@@ -248,5 +249,6 @@ export async function dismissMonthlyHighlight(
 
   revalidatePath("/centre-admin");
   revalidatePath("/super-admin");
+  revalidatePath("/media");
   return undefined;
 }

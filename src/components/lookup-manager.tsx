@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { Tag } from "lucide-react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
@@ -63,7 +64,7 @@ function ItemDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <Field>
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input id="name" name="name" defaultValue={defaultValue} required />
@@ -95,7 +96,7 @@ function ItemDialog({
               {pending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

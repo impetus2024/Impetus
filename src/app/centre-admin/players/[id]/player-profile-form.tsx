@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useState } from "react";
 import { Pencil } from "lucide-react";
@@ -93,7 +94,7 @@ export function PlayerProfileForm({
   }
 
   return (
-    <form action={formAction} className="space-y-6">
+    <ActionForm action={formAction} className="space-y-6">
       <div className="flex justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
           Cancel
@@ -281,6 +282,6 @@ export function PlayerProfileForm({
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : "Save"}
       </Button>
-    </form>
+    </ActionForm>
   );
 }

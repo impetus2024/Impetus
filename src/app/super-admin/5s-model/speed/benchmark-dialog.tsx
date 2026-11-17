@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,7 @@ export function SpeedBenchmarkDialog({
         <DialogHeader>
           <DialogTitle>{testName} — Benchmarks by Age</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="space-y-4">
+        <ActionForm action={submit} className="space-y-4">
           <Table>
             <TableHeader>
               <TableRow>
@@ -107,7 +108,7 @@ export function SpeedBenchmarkDialog({
               {pending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

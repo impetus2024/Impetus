@@ -26,11 +26,11 @@ import { PlayerRowActions } from "./row-actions";
 export default async function PlayersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; batchId?: string; playerTypeId?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; batchId?: string; coachId?: string; playerTypeId?: string; status?: string; page?: string }>;
 }) {
   const centreAdmin = await requireRole("centre_admin", "staff", "finance");
   const canEdit = centreAdmin.role === "centre_admin";
-  const { q, batchId, playerTypeId, status, page: pageParam } = await searchParams;
+  const { q, batchId, coachId, playerTypeId, status, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
   const [from, to] = pageRange(page);
@@ -44,11 +44,21 @@ export default async function PlayersPage({
 
   if (q) query = query.ilike("name", `%${q}%`);
   if (batchId) query = query.eq("batch_id", batchId);
+  const validCoachId = coachId && /^[0-9a-f-]{36}$/i.test(coachId) ? coachId : undefined;
+  if (validCoachId) {
+    // Players of any batch where this coach is head or assistant.
+    const { data: coachBatches } = await supabase
+      .from("batches")
+      .select("id")
+      .eq("centre_id", centreAdmin.centre_id!)
+      .or(`head_coach_id.eq.${validCoachId},assistant_coach_id.eq.${validCoachId}`);
+    query = query.in("batch_id", (coachBatches ?? []).map((b) => b.id));
+  }
   if (playerTypeId) query = query.eq("player_type_id", playerTypeId);
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
 
-  const [{ data: players, count }, { data: batches }, { data: playerTypes }] = await Promise.all([
+  const [{ data: players, count }, { data: batches }, { data: playerTypes }, { data: coachProfiles }] = await Promise.all([
     query.order("name").range(from, to),
     supabase
       .from("batches")
@@ -60,9 +70,17 @@ export default async function PlayersPage({
       .select("id, name")
       .eq("centre_id", centreAdmin.centre_id!)
       .order("name"),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("centre_id", centreAdmin.centre_id!)
+      .eq("role", "coach")
+      .eq("is_active", true)
+      .order("full_name"),
   ]);
 
-  const hasFilters = Boolean(q || batchId || playerTypeId || status);
+  const coaches = (coachProfiles ?? []).map((c) => ({ id: c.id, name: c.full_name }));
+  const hasFilters = Boolean(q || batchId || coachId || playerTypeId || status);
 
   // Overall 5S rating badge — same publish gate as everywhere else
   // centre-admin sees a coach's 5S data (FiveSResultsView's
@@ -88,6 +106,7 @@ export default async function PlayersPage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <ListSearch placeholder="Search players..." />
         <ListFilter paramKey="batchId" label="All batches" options={batches ?? []} />
+        <ListFilter paramKey="coachId" label="All coaches" options={coaches} />
         <ListFilter paramKey="playerTypeId" label="All program types" options={playerTypes ?? []} />
         <ListFilter
           paramKey="status"

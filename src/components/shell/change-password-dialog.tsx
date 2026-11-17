@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export function ChangePasswordDialog({
         <DialogHeader>
           <DialogTitle>Reset Password</DialogTitle>
         </DialogHeader>
-        <form action={action}>
+        <ActionForm action={action}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="oldPassword">Current Password</FieldLabel>
@@ -84,7 +85,7 @@ export function ChangePasswordDialog({
               {pending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

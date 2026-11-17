@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ export function EditMonthlyHighlightDialog({
         <DialogHeader>
           <DialogTitle>Edit Highlight — {highlight.title}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor={`title-${highlight.id}`}>Title</FieldLabel>
@@ -66,7 +67,7 @@ export function EditMonthlyHighlightDialog({
               {pending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

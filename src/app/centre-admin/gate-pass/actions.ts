@@ -19,7 +19,10 @@ export async function createGatePassEntry(
   _prev: GatePassFormState,
   formData: FormData
 ): Promise<GatePassFormState> {
-  const centreAdmin = await requireRole("centre_admin");
+  // Coaches share this action (and the /coach/gate-pass page). Their reach is
+  // limited to players in their own batches by the players RLS policy for the
+  // lookup below and re-checked inside toggle_gate_pass.
+  const centreAdmin = await requireRole("centre_admin", "coach");
 
   const parsed = GatePassSchema.safeParse({
     playerId: formData.get("playerId"),
@@ -63,5 +66,6 @@ export async function createGatePassEntry(
   }
 
   revalidatePath(PATH);
+  revalidatePath("/coach/gate-pass");
   return undefined;
 }

@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -48,7 +49,7 @@ export function LoginForm() {
 
   return (
     <>
-      <form action={action}>
+      <ActionForm action={action}>
         <FieldGroup>
           {next && <input type="hidden" name="next" value={next} />}
           <Field>
@@ -96,7 +97,7 @@ export function LoginForm() {
             {pending ? "Signing in..." : "Sign In"}
           </Button>
         </FieldGroup>
-      </form>
+      </ActionForm>
       <Dialog open={disabledDialogOpen} onOpenChange={setDisabledDialogOpen}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
