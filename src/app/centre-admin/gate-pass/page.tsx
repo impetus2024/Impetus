@@ -25,19 +25,26 @@ type LogRow = {
   reason: string;
   created_at: string;
   player_id: string;
+  performed_by_name: string | null;
+  performed_by_role: string | null;
   players: { name: string } | null;
-  profiles: { full_name: string } | null;
 };
 
 type Session = {
   key: string;
+  playerId: string;
   playerName: string;
   checkIn: GatePassEntry | null;
   checkOut: GatePassEntry | null;
 };
 
 function toEntry(log: LogRow): GatePassEntry {
-  return { time: log.created_at, reason: log.reason, by: log.profiles?.full_name ?? null };
+  return {
+    time: log.created_at,
+    reason: log.reason,
+    by: log.performed_by_name,
+    byRole: log.performed_by_role,
+  };
 }
 
 // Each gate_pass_logs row is a single action; a "visit" is a check_in
@@ -62,20 +69,20 @@ function pairSessions(logsAscending: LogRow[]): Session[] {
     for (const log of logs) {
       if (log.action === "check_in") {
         if (pendingCheckIn) {
-          sessions.push({ key: pendingCheckIn.id, playerName, checkIn: toEntry(pendingCheckIn), checkOut: null });
+          sessions.push({ key: pendingCheckIn.id, playerId: pendingCheckIn.player_id, playerName, checkIn: toEntry(pendingCheckIn), checkOut: null });
         }
         pendingCheckIn = log;
       } else {
         if (pendingCheckIn) {
-          sessions.push({ key: pendingCheckIn.id, playerName, checkIn: toEntry(pendingCheckIn), checkOut: toEntry(log) });
+          sessions.push({ key: pendingCheckIn.id, playerId: pendingCheckIn.player_id, playerName, checkIn: toEntry(pendingCheckIn), checkOut: toEntry(log) });
           pendingCheckIn = null;
         } else {
-          sessions.push({ key: log.id, playerName, checkIn: null, checkOut: toEntry(log) });
+          sessions.push({ key: log.id, playerId: log.player_id, playerName, checkIn: null, checkOut: toEntry(log) });
         }
       }
     }
     if (pendingCheckIn) {
-      sessions.push({ key: pendingCheckIn.id, playerName, checkIn: toEntry(pendingCheckIn), checkOut: null });
+      sessions.push({ key: pendingCheckIn.id, playerId: pendingCheckIn.player_id, playerName, checkIn: toEntry(pendingCheckIn), checkOut: null });
     }
   }
 
@@ -87,8 +94,10 @@ export default async function GatePassPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string; from?: string; to?: string; page?: string }>;
 }) {
-  const centreAdmin = await requireRole("centre_admin", "staff", "finance");
-  const canEdit = centreAdmin.role === "centre_admin";
+  // Also served at /coach/gate-pass (re-exported there): RLS narrows a
+  // coach's players and logs to their own batches, so the same queries work.
+  const centreAdmin = await requireRole("centre_admin", "coach", "staff", "finance");
+  const canEdit = centreAdmin.role === "centre_admin" || centreAdmin.role === "coach";
   const { q, status, from, to, page: pageParam } = await searchParams;
   const supabase = await createClient();
   const page = parsePageParam(pageParam);
@@ -104,7 +113,7 @@ export default async function GatePassPage({
   let query = supabase
     .from("gate_pass_logs")
     .select(
-      "id, action, reason, created_at, player_id, players!inner(name), profiles!gate_pass_logs_performed_by_fkey(full_name)"
+      "id, action, reason, created_at, player_id, performed_by_name, performed_by_role, players!inner(name)"
     )
     .eq("centre_id", centreAdmin.centre_id!);
 
@@ -141,6 +150,10 @@ export default async function GatePassPage({
   // of dumping up to ~500 rows into the DOM at once.
   const [rangeFrom, rangeTo] = pageRange(page);
   const pagedSessions = sessions.slice(rangeFrom, rangeTo + 1);
+
+  // Check-out shortcut is only offered on an open visit of a player who is
+  // currently checked in (the toggle flips whatever state they're in now).
+  const checkedInIds = new Set((players ?? []).filter((p) => p.is_checked_in).map((p) => p.id));
 
   const hasFilters = Boolean(q || status || from || to);
 
@@ -186,7 +199,13 @@ export default async function GatePassPage({
                 )}
               </TableCell>
               <TableCell className="text-right">
-                <GatePassDetailsDialog playerName={s.playerName} checkIn={s.checkIn} checkOut={s.checkOut} />
+                <GatePassDetailsDialog
+                  playerId={s.playerId}
+                  playerName={s.playerName}
+                  checkIn={s.checkIn}
+                  checkOut={s.checkOut}
+                  canCheckOut={canEdit && s.checkIn !== null && s.checkOut === null && checkedInIds.has(s.playerId)}
+                />
               </TableCell>
             </TableRow>
           ))}

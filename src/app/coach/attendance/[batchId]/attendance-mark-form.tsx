@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ export function AttendanceMarkForm({
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <ActionForm action={formAction} className="space-y-4">
       <input type="hidden" name="date" value={date} />
       {players.map((p) => (
         <input key={p.id} type="hidden" name={`status_${p.id}`} value={statuses[p.id] ?? ""} />
@@ -103,6 +104,6 @@ export function AttendanceMarkForm({
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : "Save Attendance"}
       </Button>
-    </form>
+    </ActionForm>
   );
 }

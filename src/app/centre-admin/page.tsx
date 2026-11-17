@@ -45,7 +45,7 @@ export default async function CentreAdminDashboard() {
       .from("profiles")
       .select("id", { count: "exact", head: true })
       .eq("centre_id", centreId)
-      .in("role", ["coach", "medical", "centre_admin", "staff", "finance"])
+      .in("role", ["coach", "medical", "centre_admin", "staff", "finance", "media"])
       .eq("is_active", true),
     supabase
       .from("players")

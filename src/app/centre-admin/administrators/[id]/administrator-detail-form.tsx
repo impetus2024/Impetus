@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useState, useTransition } from "react";
 import { Pencil } from "lucide-react";
@@ -29,6 +30,7 @@ const ROLE_LABEL: Record<string, string> = {
   medical: "Medical",
   staff: "Staff",
   finance: "Finance",
+  media: "Media Team Access",
 };
 
 export function AdministratorDetailForm({
@@ -134,7 +136,7 @@ export function AdministratorDetailForm({
           </Button>
         </div>
 
-        <form action={action} className="space-y-8">
+        <ActionForm action={action} className="space-y-8">
           <input type="hidden" name="updatedAt" value={updatedAt} />
           <FieldGroup className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
             <Field>
@@ -189,6 +191,7 @@ export function AdministratorDetailForm({
                     <SelectItem value="medical">Medical</SelectItem>
                     <SelectItem value="staff">Staff</SelectItem>
                     <SelectItem value="finance">Finance</SelectItem>
+                    <SelectItem value="media">Media Team Access</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -324,7 +327,7 @@ export function AdministratorDetailForm({
           <Button type="submit" disabled={pending} className="w-fit">
             {pending ? "Saving..." : "Save Changes"}
           </Button>
-        </form>
+        </ActionForm>
       </CardContent>
     </Card>
   );

@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { resolveTargetCentreIds } from "@/lib/publishable-content/centres";
 import { deleteViaServiceRole } from "@/lib/publishable-content/delete-with-cascade";
-import { DASHBOARD_VIEWER_ROLES } from "@/lib/publishable-content/roles";
+import { CONTENT_MANAGER_ROLES, DASHBOARD_VIEWER_ROLES } from "@/lib/publishable-content/roles";
 import { logError } from "@/lib/logger";
 
 const NewsEventSchema = z
@@ -26,6 +26,7 @@ export type NewsEventFormState = { error?: string } | undefined;
 function revalidateNewsEvents() {
   revalidatePath("/centre-admin/news-events");
   revalidatePath("/super-admin/news-events");
+  revalidatePath("/media/news-events");
 }
 
 // Sister of createMonthlyHighlight (src/lib/monthly-highlights/actions.ts)
@@ -40,7 +41,7 @@ export async function createNewsEvent(
   _prev: NewsEventFormState,
   formData: FormData
 ): Promise<NewsEventFormState> {
-  const actor = await requireRole("centre_admin", "super_admin");
+  const actor = await requireRole(...CONTENT_MANAGER_ROLES);
 
   const parsed = NewsEventSchema.safeParse({
     type: formData.get("type"),
@@ -110,7 +111,7 @@ export async function updateNewsEvent(
   _prev: NewsEventFormState,
   formData: FormData
 ): Promise<NewsEventFormState> {
-  await requireRole("centre_admin", "super_admin");
+  await requireRole(...CONTENT_MANAGER_ROLES);
 
   const parsed = NewsEventSchema.safeParse({
     type: formData.get("type"),
@@ -173,6 +174,7 @@ export async function dismissNewsEvent(newsEventId: string): Promise<NewsEventFo
 
   revalidatePath("/centre-admin");
   revalidatePath("/super-admin");
+  revalidatePath("/media");
   return undefined;
 }
 
@@ -184,6 +186,11 @@ export async function deleteNewsEvent(
   _prev: NewsEventFormState,
   _formData: FormData
 ): Promise<NewsEventFormState> {
+  // Was missing: the RLS-scoped select below passes for any role that can
+  // merely *view* the item (coach, parent, ...), and the delete then runs on
+  // the service-role client.
+  await requireRole(...CONTENT_MANAGER_ROLES);
+
   const supabase = await createClient();
 
   const { data: existing } = await supabase

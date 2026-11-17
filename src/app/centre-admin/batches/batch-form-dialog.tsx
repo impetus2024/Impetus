@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useState } from "react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
@@ -83,7 +84,7 @@ export function BatchFormDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="name">Batch Name</FieldLabel>
@@ -232,7 +233,7 @@ export function BatchFormDialog({
               {pending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

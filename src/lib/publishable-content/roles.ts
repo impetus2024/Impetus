@@ -12,5 +12,10 @@ export const DASHBOARD_VIEWER_ROLES: UserRole[] = [
   "finance",
   "coach",
   "medical",
+  "media",
   "parent",
 ];
+
+// Roles that create/edit/delete Monthly Highlights and News & Events.
+// Media publishes only to its own centre, same as centre_admin.
+export const CONTENT_MANAGER_ROLES: UserRole[] = ["super_admin", "centre_admin", "media"];

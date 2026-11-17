@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import Link from "next/link";
 import { useActionState } from "react";
@@ -29,7 +30,7 @@ export default function ForgotPasswordPage() {
             password. Check your inbox (and spam folder).
           </FieldDescription>
         ) : (
-          <form action={action}>
+          <ActionForm action={action}>
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -51,7 +52,7 @@ export default function ForgotPasswordPage() {
                 {pending ? "Sending..." : "Send reset link"}
               </Button>
             </FieldGroup>
-          </form>
+          </ActionForm>
         )}
         <p className="mt-6 text-center text-sm text-muted-foreground">
           <Link href="/login" className="text-primary hover:underline">

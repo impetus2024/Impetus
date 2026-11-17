@@ -2,8 +2,9 @@
 
 import * as z from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { authRateKeys } from "@/lib/auth/rate-limit-core";
 import { absoluteUrl } from "@/lib/url";
-import { isRateLimited, recordAttempt } from "@/lib/auth/rate-limit";
+import { consumeAll, getClientIp, RATE_LIMIT_UNAVAILABLE_MESSAGE } from "@/lib/auth/rate-limit";
 
 const ForgotPasswordSchema = z.object({
   email: z.email({ error: "Enter a valid email." }),
@@ -23,13 +24,15 @@ export async function requestPasswordReset(
     return { error: "Enter a valid email." };
   }
 
-  const rateLimitKey = `reset:${parsed.data.email.trim().toLowerCase()}`;
-  if (isRateLimited(rateLimitKey).limited) {
+  const rateKeys = authRateKeys("reset", parsed.data.email, await getClientIp());
+  const rateLimit = await consumeAll(rateKeys.consume);
+  // Generic message: independent of whether the account exists.
+  if (rateLimit.unavailable) return { error: RATE_LIMIT_UNAVAILABLE_MESSAGE };
+  if (rateLimit.limited) {
     // Same success response either way — don't let the rate-limit branch
     // become a second way to distinguish real accounts from typos.
     return { success: true };
   }
-  recordAttempt(rateLimitKey);
 
   const supabase = await createClient();
 

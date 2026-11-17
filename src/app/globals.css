@@ -172,6 +172,15 @@
   h1, h2, h3, h4 {
     @apply text-balance tracking-tight;
   }
+  /* Red asterisk on the label of every Field whose control is mandatory
+     (native `required`, or aria-required for custom controls), so forms
+     don't each have to remember to add one. */
+  [data-slot="field"]:has(:is(input, textarea, select)[required], [aria-required="true"])
+    > [data-slot="field-label"]::after {
+    content: "*";
+    margin-left: 0.125rem;
+    color: var(--destructive);
+  }
 }
 
 @layer utilities {

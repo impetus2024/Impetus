@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySession } from "@/lib/auth/dal";
 import { revokeUserSessions } from "@/lib/auth/provision-user";
-import { isRateLimited, recordAttempt, clearAttempts } from "@/lib/auth/rate-limit";
+import { consumeAttempt, clearAttempts, RATE_LIMIT_UNAVAILABLE_MESSAGE } from "@/lib/auth/rate-limit";
 import { logError } from "@/lib/logger";
 
 export async function logout() {
@@ -57,7 +57,9 @@ export async function changeOwnPassword(
   }
 
   const rateLimitKey = `changepw:${profile.id}`;
-  const rateLimit = isRateLimited(rateLimitKey);
+  // Count before verifying (atomic); success clears it below.
+  const rateLimit = await consumeAttempt(rateLimitKey);
+  if (rateLimit.unavailable) return { error: RATE_LIMIT_UNAVAILABLE_MESSAGE };
   if (rateLimit.limited) {
     return {
       error: `Too many attempts. Try again in ${rateLimit.retryAfterMinutes} minute${rateLimit.retryAfterMinutes === 1 ? "" : "s"}.`,
@@ -72,10 +74,9 @@ export async function changeOwnPassword(
   });
 
   if (verifyError) {
-    recordAttempt(rateLimitKey);
     return { error: "Current password is incorrect." };
   }
-  clearAttempts(rateLimitKey);
+  await clearAttempts(rateLimitKey);
 
   const { error: updateError } = await supabase.auth.updateUser({
     password: parsed.data.newPassword,

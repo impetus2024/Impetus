@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useState } from "react";
 import type { DateRange } from "react-day-picker";
@@ -52,7 +53,7 @@ export function TestingWindowDialog({
         <DialogHeader>
           <DialogTitle>5S Testing Window</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <input type="hidden" name="startDate" value={range?.from ? toISODate(range.from) : ""} />
           <input type="hidden" name="endDate" value={range?.to ? toISODate(range.to) : ""} />
           <p className="mb-2 text-sm text-muted-foreground">
@@ -65,7 +66,7 @@ export function TestingWindowDialog({
               {pending ? "Saving..." : "Save Window"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

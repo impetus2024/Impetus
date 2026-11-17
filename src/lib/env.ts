@@ -39,6 +39,10 @@ const RECOMMENDED_VARS = [
 // email-analytics goes stale.
 const PRODUCTION_EMAIL_VARS = ["RESEND_API_KEY", "EMAIL_FROM"] as const;
 
+// Distributed rate limiting (src/lib/auth/rate-limit.ts). Optional locally,
+// where it falls back to an in-memory limiter.
+const PRODUCTION_REDIS_VARS = ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"] as const;
+
 // Resend rejects a From that isn't a verified sending identity, which is a
 // 403 per send rather than anything a startup check can see â€” but the two
 // shapes it accepts ("name@domain" or "Name <name@domain>") are checkable
@@ -66,6 +70,25 @@ export function validateEnv(): void {
     if (missingEmail.length > 0) {
       throw new Error(
         `Missing required environment variable(s) for production email: ${missingEmail.join(", ")}. Account invites, password resets and email-change notifications cannot be delivered without these. See .env.local.example.`
+      );
+    }
+
+    // Without Upstash, rate limiting silently degrades to per-instance memory
+    // on Vercel, which does not stop distributed brute-force attempts.
+    const missingRedis = PRODUCTION_REDIS_VARS.filter((key) => !process.env[key]);
+    if (missingRedis.length > 0) {
+      throw new Error(
+        `Missing required environment variable(s) for production rate limiting: ${missingRedis.join(", ")}. Create an Upstash Redis database and copy its REST URL/token. See .env.local.example.`
+      );
+    }
+
+    // Per-IP login/reset limits only work behind a declared trusted proxy
+    // (see lib/auth/client-ip.ts). Without one they are skipped and the
+    // limiter is per-account only, which a single attacker can use to lock a
+    // victim out — so say so loudly rather than fail the boot.
+    if (process.env.VERCEL !== "1" && !process.env.TRUSTED_PROXY_HOPS) {
+      logWarning(
+        "Neither VERCEL=1 nor TRUSTED_PROXY_HOPS is set: client IPs are unknown, so per-IP login/reset rate limits are disabled. Set TRUSTED_PROXY_HOPS to the number of proxies in front of the app."
       );
     }
 

@@ -9,7 +9,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { randomUUID } from "crypto";
-import { isRateLimited, recordAttempt } from "@/lib/auth/rate-limit";
+import { consumeAttempt, RATE_LIMIT_UNAVAILABLE_MESSAGE } from "@/lib/auth/rate-limit";
 import { MAX_UPLOAD_BYTES } from "./upload-constraints";
 
 // Cloudflare R2 (S3-compatible). "public" objects (centre logos) are served
@@ -110,13 +110,15 @@ export async function uploadFile(
 ): Promise<string> {
   if (actorId) {
     const rateLimitKey = `upload:${actorId}`;
-    const rateLimit = isRateLimited(rateLimitKey);
+    const rateLimit = await consumeAttempt(rateLimitKey);
+    if (rateLimit.unavailable) {
+      throw new UploadValidationError(RATE_LIMIT_UNAVAILABLE_MESSAGE);
+    }
     if (rateLimit.limited) {
       throw new UploadValidationError(
         `Too many uploads — try again in ${rateLimit.retryAfterMinutes} minute${rateLimit.retryAfterMinutes === 1 ? "" : "s"}.`
       );
     }
-    recordAttempt(rateLimitKey);
   }
 
   if (file.size > MAX_UPLOAD_BYTES) {

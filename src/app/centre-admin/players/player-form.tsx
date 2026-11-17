@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -116,7 +117,7 @@ export function PlayerForm({
       <CardContent className="space-y-8">
         <Stepper steps={STEPS} currentStep={step} className="mx-auto max-w-sm" />
 
-        <form action={formAction} className="space-y-8">
+        <ActionForm action={formAction} className="space-y-8">
           <div ref={step1Ref} className={cn("space-y-6", step !== 1 && "hidden")}>
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-medium">Player Information</h2>
@@ -438,7 +439,7 @@ export function PlayerForm({
               </Button>
             </div>
           </div>
-        </form>
+        </ActionForm>
       </CardContent>
     </Card>
   );

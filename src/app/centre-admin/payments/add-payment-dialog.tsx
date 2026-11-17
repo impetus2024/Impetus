@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,7 @@ export function AddPaymentDialog({
         <DialogHeader>
           <DialogTitle>Add Payment</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="playerId">Player</FieldLabel>
@@ -97,7 +98,7 @@ export function AddPaymentDialog({
               {pending ? "Saving..." : "Save Payment"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

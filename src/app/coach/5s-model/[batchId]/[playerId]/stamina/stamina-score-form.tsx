@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState } from "react";
 import Link from "next/link";
@@ -44,7 +45,7 @@ export function StaminaScoreForm({
   const { entries, save } = useAutoSaveScore(batchId, playerId);
 
   return (
-    <form action={formAction} className="space-y-8">
+    <ActionForm action={formAction} className="space-y-8">
       {tests.map((test) => {
         const existing = existingByTest.get(test.id);
         const locked = lockedTestIds.has(test.id);
@@ -137,6 +138,6 @@ export function StaminaScoreForm({
           {pending ? "Submitting..." : "Submit"}
         </Button>
       </div>
-    </form>
+    </ActionForm>
   );
 }

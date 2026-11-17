@@ -85,6 +85,7 @@ export const COACH_NAV: NavGroup[] = [
     items: [
       { href: "/coach/batches", label: "Training Batch", icon: CalendarCheck },
       { href: "/coach/attendance", label: "Attendance", icon: ClipboardCheck },
+      { href: "/coach/gate-pass", label: "Movement Pass", icon: DoorOpen },
       { href: "/coach/injuries", label: "Injuries", icon: HeartPulse },
       { href: "/coach/5s-model", label: "5S Model", icon: Sparkles },
     ],
@@ -117,6 +118,17 @@ export const MEDICAL_NAV: NavGroup[] = [
   },
 ];
 
+export const MEDIA_NAV: NavGroup[] = [
+  { items: [{ href: "/media", label: "Dashboard", icon: LayoutDashboard }] },
+  {
+    label: "Content",
+    items: [
+      { href: "/media/monthly-highlights", label: "Monthly Highlights", icon: Megaphone },
+      { href: "/media/news-events", label: "News & Events", icon: Newspaper },
+    ],
+  },
+];
+
 export const PARENT_NAV: NavGroup[] = [
   { items: [{ href: "/parent", label: "Dashboard", icon: LayoutDashboard }] },
   {
@@ -136,12 +148,13 @@ export const PARENT_NAV: NavGroup[] = [
 // boundary (layout.tsx is a Server Component; the shell is Client). So
 // layout.tsx passes this string key instead of the NavGroup[] itself, and
 // the Client Components resolve it via this same-module import.
-export type NavKey = "super-admin" | "centre-admin" | "coach" | "medical" | "parent";
+export type NavKey = "super-admin" | "centre-admin" | "coach" | "medical" | "media" | "parent";
 
 export const NAV_BY_KEY: Record<NavKey, NavGroup[]> = {
   "super-admin": SUPER_ADMIN_NAV,
   "centre-admin": CENTRE_ADMIN_NAV,
   coach: COACH_NAV,
   medical: MEDICAL_NAV,
+  media: MEDIA_NAV,
   parent: PARENT_NAV,
 };

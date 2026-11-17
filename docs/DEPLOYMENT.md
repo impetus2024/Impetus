@@ -31,14 +31,43 @@ is Vercel-specific beyond that assumption, but the steps below are written for i
 4. **Auth → Providers → Email**: confirm `enable_confirmations` matches what
    `src/lib/auth/provision-user.ts` expects (accounts are created via the admin API with
    `email_confirm: true`, so this app never relies on Supabase's own confirmation-email flow).
-5. **Auth → Rate Limits**: the local `supabase/config.toml` defaults are reasonable starting
-   points; review them against expected login volume before launch (see `[auth.rate_limit]` in
-   that file for what's currently assumed).
+5. **Auth → Rate Limits** (dashboard, per project — not set by `supabase/config.toml`, which is
+   local only). The app's own limiter (`src/lib/auth/rate-limit.ts`) only guards the app's server
+   actions; `NEXT_PUBLIC_SUPABASE_ANON_KEY` is public, so anyone can call GoTrue's
+   `/auth/v1/token?grant_type=password` directly and skip it. These dashboard limits are the
+   only control on that path, so review them before launch:
+   - *Sign-ups and sign-ins* (per IP, 5 min): keep at or below the default 30; lower (10–15) if
+     centres don't share one NAT'd IP with many staff.
+   - *Token verifications* (OTP/magic link): keep default 30 or lower.
+   - *Emails sent per hour*: set to your real expected volume (invites + resets); it caps
+     reset-email bombing at the GoTrue layer.
+   - **Auth → Attack Protection → CAPTCHA** (Turnstile or hCaptcha): the strongest control against
+     direct-API credential stuffing, but once enabled GoTrue rejects every password sign-in and
+     reset request that lacks a `captchaToken`. The login and forgot-password forms don't render a
+     widget or send a token yet, so enabling it today would lock everyone out. Do it as a
+     separate change: widget in both forms, pass `options: { captchaToken }` to
+     `signInWithPassword` / `resetPasswordForEmail`, then enable.
+   - **Auth → Providers → Email → Secure password change**: requires a recent sign-in (or a
+     reauthentication nonce) before `updateUser({ password })`, closing the "stolen session
+     changes the password without knowing the old one" path. The app's change-password and
+     forced-change flows sign in immediately before updating, so they should satisfy it; test
+     both on a staging project before enabling.
 6. Copy `Project URL`, `anon` key, and `service_role` key into your deployment's environment
    variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
    `SUPABASE_SERVICE_ROLE_KEY`). **The service role key bypasses Row Level Security — it must
    never be exposed to the browser or committed to git** (already enforced: every file that
    imports it has `import "server-only"`, and `.gitignore` excludes all `.env*` files).
+   **Optional but recommended — `SUPABASE_SECRET_KEY`**: create a secret API key
+   (`sb_secret_...`, Project Settings → API Keys) and set it as `SUPABASE_SECRET_KEY`. The session
+   refresh in `src/lib/supabase/middleware.ts` then forwards the real client IP to Supabase Auth in
+   `Sb-Forwarded-For`; without it every user's auth calls come from the server's IP and share one
+   Supabase Auth rate-limit bucket. Like the service role key, it bypasses RLS and must stay
+   server-side (it is used only by that one client and is never put on a response). It needs a
+   trusted client IP — automatic on Vercel, otherwise set `TRUSTED_PROXY_HOPS` (section 5). If the
+   key is set but no IP can be resolved, requests fall back to the anon key and production emits
+   a throttled (once per 5 min per instance) Sentry warning plus the count metric
+   `supabase_auth.sb_forwarded_for_fallback` — alert on that metric. Rotate the key in the
+   dashboard and redeploy if it leaks.
 7. **Connection pooling**: at meaningful concurrency, confirm Supabase's connection pooler
    (Supavisor/PgBouncer, enabled by default on hosted projects) is active — the app opens a fresh
    Supabase client per request and doesn't manage its own pool.
@@ -100,11 +129,16 @@ no-op if left unset — see `src/sentry.server.config.ts`, `src/sentry.edge.conf
    Preview environments — Preview deploys are how PRs get reviewed, and they need a working
    Supabase connection too; point Preview at a separate non-production Supabase project if you
    want deploy previews isolated from real data).
-2. **Do not set `DEV_DEFAULT_PASSWORD`** in any deployed environment — the app refuses to boot if
+2. Per-IP rate limits read the client IP from `x-vercel-forwarded-for` (set by Vercel itself;
+   nothing to configure). Self-hosting behind your own proxy/load balancer? Set
+   `TRUSTED_PROXY_HOPS` to the number of proxies you operate instead (see `.env.local.example`);
+   with neither, IP limits are skipped and boot logs a warning. The same IP feeds
+   `Sb-Forwarded-For` when `SUPABASE_SECRET_KEY` is set (section 1, step 6).
+3. **Do not set `DEV_DEFAULT_PASSWORD`** in any deployed environment — the app refuses to boot if
    it's set while `NODE_ENV=production` (`src/lib/env.ts`), specifically because it would give
    every newly provisioned account the same known password.
-3. Build command / output: defaults (`next build`) — nothing custom needed.
-4. Confirm the `Proxy (Middleware)` bundle Vercel reports at build time includes
+4. Build command / output: defaults (`next build`) — nothing custom needed.
+5. Confirm the `Proxy (Middleware)` bundle Vercel reports at build time includes
    `src/proxy.ts` (this Next.js version's renamed `middleware.ts` — see `AGENTS.md`) — it's what
    enforces the authentication redirect on every route.
 

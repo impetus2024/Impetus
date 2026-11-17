@@ -91,6 +91,7 @@ Every variable is documented inline in [`.env.local.example`](.env.local.example
 | `NEXT_PUBLIC_APP_URL` | Yes | Absolute-URL base for links in emails |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase client config |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only admin client (account provisioning, resets) — **never** expose this to the browser |
+| `SUPABASE_SECRET_KEY` | No | Server-only secret API key for session refresh; forwards client IP via `Sb-Forwarded-For` (needs `VERCEL=1` or `TRUSTED_PROXY_HOPS`; see `docs/DEPLOYMENT.md`) |
 | `FIELD_ENCRYPTION_KEY` | Yes | AES-256-GCM key for Aadhaar/passport numbers at rest (`openssl rand -base64 32`) |
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_PUBLIC_URL` | Recommended | Cloudflare R2 storage — degrades gracefully (logged warning, upload fails cleanly) if unset, so auth/data flows can stand up before storage is wired in |
 | `R2_PRIVATE_BUCKET_NAME` | Optional | A second bucket with public access left off, for a real public/private boundary on staff/player documents (see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)) |

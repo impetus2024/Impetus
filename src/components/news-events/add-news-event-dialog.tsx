@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useState } from "react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
@@ -55,7 +56,7 @@ export function AddNewsEventDialog({
         <DialogHeader>
           <DialogTitle>Add News / Event</DialogTitle>
         </DialogHeader>
-        <form action={submit} className="space-y-6">
+        <ActionForm action={submit} className="space-y-6">
           <FieldSet>
             <FieldLegend variant="label">Details</FieldLegend>
             <FieldGroup>
@@ -99,7 +100,7 @@ export function AddNewsEventDialog({
               {pending ? "Publishing..." : "Publish"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

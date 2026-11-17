@@ -37,6 +37,7 @@ const ROLE_LABEL: Record<string, string> = {
   medical: "Medical",
   staff: "Staff",
   finance: "Finance",
+  media: "Media Team Access",
 };
 
 const ROLE_OPTIONS = [
@@ -45,9 +46,10 @@ const ROLE_OPTIONS = [
   { id: "medical", name: "Medical" },
   { id: "staff", name: "Staff" },
   { id: "finance", name: "Finance" },
+  { id: "media", name: "Media Team Access" },
 ];
 
-const MANAGED_ROLES = ["centre_admin", "coach", "medical", "staff", "finance"] as const;
+const MANAGED_ROLES = ["centre_admin", "coach", "medical", "staff", "finance", "media"] as const;
 
 export default async function AdministratorsPage({
   searchParams,

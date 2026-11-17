@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState } from "react";
 import Link from "next/link";
@@ -53,7 +54,7 @@ export function SpiritResponseForm({
   let slNo = 0;
 
   return (
-    <form action={formAction} className="space-y-8">
+    <ActionForm action={formAction} className="space-y-8">
       {sections.map((section) => (
         <div key={section.label} className="space-y-3">
           <h2 className="text-lg font-semibold">{section.label}</h2>
@@ -112,6 +113,6 @@ export function SpiritResponseForm({
           {pending ? "Submitting..." : "Submit"}
         </Button>
       </div>
-    </form>
+    </ActionForm>
   );
 }

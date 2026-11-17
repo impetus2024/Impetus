@@ -181,7 +181,7 @@ async function main() {
   const devBatch = batches!.find((b) => b.name === "Evening U-12 Development")!;
 
   // ---- players ----
-  const playerRows = [
+  const basePlayerRows = [
     {
       name: "Arjun Mehta",
       date_of_birth: yearsAgo(14),
@@ -249,6 +249,36 @@ async function main() {
       is_checked_in: false,
     },
   ];
+
+  // Pad each batch up to 10 players so list/pagination/roster pages have
+  // enough rows to test against.
+  const EXTRA_ELITE = ["Dhruv Kapoor", "Reyansh Iyer", "Sai Reddy", "Krish Malhotra", "Vivaan Khanna", "Aarav Bhatt", "Ayaan Pillai"];
+  const EXTRA_DEV = ["Atharv Joshi", "Neel Desai", "Yash Verma", "Pranav Menon", "Rudra Chopra", "Tanish Bose", "Shaurya Kulkarni"];
+  const extraRows = [
+    ...EXTRA_ELITE.map((name, i) => ({
+      name,
+      date_of_birth: yearsAgo(14 + (i % 2)),
+      age_category_id: u15.id,
+      batch_id: eliteBatch.id,
+      player_type_id: elite.id,
+      package_id: eliteMonthly.id,
+      parent_email: `${name.split(" ")[0].toLowerCase()}.parent@example.com`,
+      father_name: `${name.split(" ")[1]} Sr.`,
+      is_checked_in: i % 2 === 0,
+    })),
+    ...EXTRA_DEV.map((name, i) => ({
+      name,
+      date_of_birth: yearsAgo(11 + (i % 2)),
+      age_category_id: u12.id,
+      batch_id: devBatch.id,
+      player_type_id: development.id,
+      package_id: devMonthly.id,
+      parent_email: `${name.split(" ")[0].toLowerCase()}.parent@example.com`,
+      father_name: `${name.split(" ")[1]} Sr.`,
+      is_checked_in: i % 2 === 1,
+    })),
+  ];
+  const playerRows = [...basePlayerRows, ...extraRows];
 
   const { data: players, error: playerError } = await supabase
     .from("players")

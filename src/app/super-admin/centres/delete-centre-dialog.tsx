@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useState } from "react";
 import { useDialogFormAction } from "@/hooks/use-dialog-form-action";
@@ -38,7 +39,7 @@ export function DeleteCentreDialog({
         <DialogHeader>
           <DialogTitle>Delete Centre — {centre.name}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <FieldDescription className="text-destructive">
               This permanently deletes {centre.name} and every batch, player, payment,
@@ -72,7 +73,7 @@ export function DeleteCentreDialog({
               {pending ? "Deleting..." : "Delete Centre"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

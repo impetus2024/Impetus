@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ export function InviteAdminDialog({ centreId, centreName }: { centreId: string; 
         <DialogHeader>
           <DialogTitle>Invite Admin — {centreName}</DialogTitle>
         </DialogHeader>
-        <form action={submit}>
+        <ActionForm action={submit}>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="adminName">Name</FieldLabel>
@@ -47,7 +48,7 @@ export function InviteAdminDialog({ centreId, centreName }: { centreId: string; 
               {pending ? "Inviting..." : "Invite"}
             </Button>
           </DialogFooter>
-        </form>
+        </ActionForm>
       </DialogContent>
     </Dialog>
   );

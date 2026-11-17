@@ -32,7 +32,9 @@ type StaffProfileInsert = Database["public"]["Tables"]["staff_profiles"]["Insert
 // Staff/Finance are read-only accounts (view the same data centre_admin
 // sees, no mutation rights anywhere else in the app) — see the 20260803*
 // migrations for the RLS side of that.
-const StaffRole = z.enum(["centre_admin", "coach", "medical", "staff", "finance"]);
+// Media is not read-only: it has full access to Monthly Highlights and
+// News & Events for the centre and nothing else (see 20261117010000).
+const StaffRole = z.enum(["centre_admin", "coach", "medical", "staff", "finance", "media"]);
 
 const AdministratorSchema = z.object({
   name: z.string().min(1, { error: "Name is required." }),
@@ -483,7 +485,7 @@ export async function resetAdministratorPassword(
     .select("id, email, full_name")
     .eq("id", profileId)
     .eq("centre_id", centreAdmin.centre_id!)
-    .in("role", ["centre_admin", "coach", "medical", "staff", "finance"])
+    .in("role", ["centre_admin", "coach", "medical", "staff", "finance", "media"])
     .maybeSingle();
 
   if (!staff) {

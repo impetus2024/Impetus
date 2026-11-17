@@ -1,4 +1,5 @@
 "use client";
+import { ActionForm } from "@/components/ui/action-form";
 
 import { useActionState, useState } from "react";
 import { Pencil } from "lucide-react";
@@ -92,7 +93,7 @@ export function CoachProfileForm({
           </Button>
         </div>
 
-        <form action={action} className="space-y-8">
+        <ActionForm action={action} className="space-y-8">
           <FieldGroup className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="name">Name</FieldLabel>
@@ -148,7 +149,7 @@ export function CoachProfileForm({
           <Button type="submit" disabled={pending} className="w-fit">
             {pending ? "Saving..." : "Save Changes"}
           </Button>
-        </form>
+        </ActionForm>
       </CardContent>
     </Card>
   );
